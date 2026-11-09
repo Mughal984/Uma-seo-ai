@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import {run,get,all} from "./db.js";
 import {normalizeUrl} from "./security.js";
 import {auditWebsite} from "./audit.js";
+import {buildActionPlan} from "./agent.js";
 const app=express(),PORT=Number(process.env.PORT||3000),SECRET=process.env.JWT_SECRET;
 if(!SECRET||SECRET.length<32){console.error("Set JWT_SECRET to at least 32 characters in .env");process.exit(1)}
 app.use(helmet({contentSecurityPolicy:false}));app.use(express.json({limit:"100kb"}));app.use(express.static("public"));
@@ -20,5 +21,6 @@ app.get("/api/projects",auth,async(req,res)=>res.json({projects:await all("SELEC
 app.post("/api/projects",auth,async(req,res)=>{try{const name=String(req.body.name||"").trim().slice(0,80),url=normalizeUrl(String(req.body.url||""));if(!name)return res.status(400).json({error:"Project name required."});const r=await run("INSERT INTO projects(user_id,name,url) VALUES(?,?,?)",[req.user.id,name,url]);res.status(201).json({project:{id:r.id,name,url}})}catch(e){res.status(400).json({error:e.message})}});
 app.post("/api/projects/:id/audit",auth,async(req,res)=>{try{const p=await get("SELECT * FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const audit=await auditWebsite(p.url);await run("INSERT INTO audits(project_id,result_json) VALUES(?,?)",[p.id,JSON.stringify(audit)]);res.json({audit})}catch(e){res.status(400).json({error:e.message||"Audit failed."})}});
 app.get("/api/projects/:id/audits",auth,async(req,res)=>{const p=await get("SELECT id FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const rows=await all("SELECT id,result_json,created_at FROM audits WHERE project_id=? ORDER BY id DESC LIMIT 10",[p.id]);res.json({audits:rows.map(x=>({id:x.id,createdAt:x.created_at,result:JSON.parse(x.result_json)}))})});
+app.post("/api/projects/:id/agent",auth,async(req,res)=>{try{const p=await get("SELECT id,url FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const latest=await get("SELECT result_json,created_at FROM audits WHERE project_id=? ORDER BY id DESC LIMIT 1",[p.id]);if(!latest)return res.status(409).json({error:"Run a website audit first."});const plan=buildActionPlan(JSON.parse(latest.result_json));res.json({plan,auditCreatedAt:latest.created_at});}catch(e){res.status(400).json({error:e.message||"Agent failed."})}});
 app.get("/api/health",(req,res)=>res.json({status:"ok",product:"Umar SEO AI"}));
 app.listen(PORT,()=>console.log("Umar SEO AI running at http://localhost:"+PORT));
