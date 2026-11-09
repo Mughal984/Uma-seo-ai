@@ -9,6 +9,8 @@ import {normalizeUrl} from "./security.js";
 import {auditWebsite} from "./audit.js";
 import {runSeoAgentV2} from "./seo-agent-v2.js";
 import {compareKeywordCoverage} from "./keyword-research.js";
+import crypto from "node:crypto";
+import {encryptGoogleToken,decryptGoogleToken} from "./google-integration.js";
 const app=express(),PORT=Number(process.env.PORT||3000),SECRET=process.env.JWT_SECRET;
 if(!SECRET||SECRET.length<32){console.error("Set JWT_SECRET to at least 32 characters in .env");process.exit(1)}
 app.use(helmet({contentSecurityPolicy:false}));app.use(express.json({limit:"100kb"}));app.use(express.static("public"));
@@ -34,4 +36,100 @@ app.post("/api/projects/:id/keyword-research",auth,async(req,res)=>{try{
  }catch(e){res.status(400).json({error:e.message||"Keyword research failed."})}});
 app.get("/api/projects/:id/audits",auth,async(req,res)=>{const p=await get("SELECT id FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const rows=await all("SELECT id,result_json,created_at FROM audits WHERE project_id=? ORDER BY id DESC LIMIT 10",[p.id]);res.json({audits:rows.map(x=>({id:x.id,createdAt:x.created_at,result:JSON.parse(x.result_json)}))})});
 app.get("/api/health",(req,res)=>res.json({status:"ok",product:"Umar SEO AI"}));
+
+const GOOGLE_SCOPES = [
+ "https://www.googleapis.com/auth/webmasters.readonly",
+ "https://www.googleapis.com/auth/analytics.readonly"
+];
+function googleConfig(){
+ const base=process.env.PUBLIC_BASE_URL;
+ if(!process.env.GOOGLE_CLIENT_ID||!process.env.GOOGLE_CLIENT_SECRET||!base||!/^[a-f0-9]{64}$/i.test(process.env.GOOGLE_TOKEN_ENCRYPTION_KEY||"")) throw new Error("Google OAuth server settings are incomplete.");
+ const parsed=new URL(base);
+ if(parsed.protocol!=="https:" && parsed.hostname!=="localhost") throw new Error("PUBLIC_BASE_URL must use HTTPS.");
+ return {clientId:process.env.GOOGLE_CLIENT_ID,clientSecret:process.env.GOOGLE_CLIENT_SECRET,redirectUri:new URL("/api/google/callback",base).toString()};
+}
+async function googleAccessToken(userId){
+ const cfg=googleConfig();
+ const connection=await get("SELECT refresh_token_enc FROM google_connections WHERE user_id=?",[userId]);
+ if(!connection) throw new Error("Google account is not connected.");
+ const refreshToken=decryptGoogleToken(connection.refresh_token_enc,process.env.GOOGLE_TOKEN_ENCRYPTION_KEY);
+ const response=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({client_id:cfg.clientId,client_secret:cfg.clientSecret,refresh_token:refreshToken,grant_type:"refresh_token"})});
+ const tokens=await response.json();
+ if(!response.ok||!tokens.access_token) throw new Error("Google authorization expired or was revoked. Reconnect Google.");
+ return tokens.access_token;
+}
+async function googleApi(userId,url,options={}){
+ const accessToken=await googleAccessToken(userId);
+ const response=await fetch(url,{...options,headers:{Authorization:"Bearer "+accessToken,"Content-Type":"application/json",...(options.headers||{})}});
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok) throw new Error("Google API request failed ("+response.status+"). Check that the Search Console and Analytics APIs are enabled and the selected property is accessible.");
+ return data;
+}
+const validReportDates=(start,end)=>/^\d{4}-\d{2}-\d{2}$/.test(start||"")&&/^\d{4}-\d{2}-\d{2}$/.test(end||"")&&start<=end;
+app.post("/api/google/connect",auth,async(req,res)=>{
+ try{
+  const cfg=googleConfig(),nonce=crypto.randomBytes(32).toString("hex"),expires=Date.now()+10*60*1000;
+  await run("INSERT INTO google_oauth_states(nonce,user_id,expires_at) VALUES(?,?,?)",[nonce,req.user.id,expires]);
+  const state=jwt.sign({uid:req.user.id,nonce},SECRET,{expiresIn:"10m",issuer:"umar-seo-ai-google"});
+  const params=new URLSearchParams({client_id:cfg.clientId,redirect_uri:cfg.redirectUri,response_type:"code",scope:GOOGLE_SCOPES.join(" "),access_type:"offline",include_granted_scopes:"true",prompt:"consent",state});
+  res.json({authorizationUrl:"https://accounts.google.com/o/oauth2/v2/auth?"+params.toString()});
+ }catch(e){res.status(503).json({error:e.message||"Google connection is not configured."})}
+});
+app.get("/api/google/callback",async(req,res)=>{
+ try{
+  if(req.query.error) return res.redirect("/?google=denied");
+  const cfg=googleConfig(),payload=jwt.verify(String(req.query.state||""),SECRET,{issuer:"umar-seo-ai-google"});
+  if(!payload.uid||!payload.nonce||!req.query.code) return res.redirect("/?google=invalid");
+  const saved=await get("SELECT user_id,expires_at FROM google_oauth_states WHERE nonce=?",[payload.nonce]);
+  await run("DELETE FROM google_oauth_states WHERE nonce=?",[payload.nonce]);
+  if(!saved||saved.user_id!==payload.uid||saved.expires_at<Date.now()) return res.redirect("/?google=expired");
+  const response=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({code:String(req.query.code),client_id:cfg.clientId,client_secret:cfg.clientSecret,redirect_uri:cfg.redirectUri,grant_type:"authorization_code"})});
+  const tokens=await response.json();
+  if(!response.ok||!tokens.access_token) return res.redirect("/?google=token_error");
+  const old=await get("SELECT refresh_token_enc FROM google_connections WHERE user_id=?",[payload.uid]);
+  const refreshToken=tokens.refresh_token;
+  const encrypted=refreshToken?encryptGoogleToken(refreshToken,process.env.GOOGLE_TOKEN_ENCRYPTION_KEY):old?.refresh_token_enc;
+  if(!encrypted) return res.redirect("/?google=missing_refresh");
+  await run("INSERT INTO google_connections(user_id,refresh_token_enc) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET refresh_token_enc=excluded.refresh_token_enc,updated_at=CURRENT_TIMESTAMP",[payload.uid,encrypted]);
+  res.redirect("/?google=connected");
+ }catch(e){console.error("Google OAuth callback failed:",e.message);res.redirect("/?google=error")}
+});
+app.get("/api/google/status",auth,async(req,res)=>{
+ const row=await get("SELECT created_at,updated_at FROM google_connections WHERE user_id=?",[req.user.id]);
+ res.json({connected:!!row,connectedAt:row?.created_at||null});
+});
+app.delete("/api/google/connection",auth,async(req,res)=>{
+ await run("DELETE FROM google_connections WHERE user_id=?",[req.user.id]);
+ res.json({connected:false});
+});
+app.get("/api/google/search-console/sites",auth,async(req,res)=>{
+ try{const data=await googleApi(req.user.id,"https://www.googleapis.com/webmasters/v3/sites");res.json({sites:data.siteEntry||[]})}
+ catch(e){res.status(502).json({error:e.message})}
+});
+app.get("/api/google/analytics/properties",auth,async(req,res)=>{
+ try{const data=await googleApi(req.user.id,"https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200");const properties=(data.accountSummaries||[]).flatMap(a=>(a.propertySummaries||[]).map(p=>({property:p.property,displayName:p.displayName,account:a.displayName})));res.json({properties,nextPageToken:data.nextPageToken||null})}
+ catch(e){res.status(502).json({error:e.message})}
+});
+app.get("/api/google/search-console/performance",auth,async(req,res)=>{
+ try{
+  const siteUrl=String(req.query.siteUrl||""),startDate=String(req.query.startDate||""),endDate=String(req.query.endDate||"");
+  if(!siteUrl||!validReportDates(startDate,endDate)) return res.status(400).json({error:"Provide siteUrl, startDate and endDate in YYYY-MM-DD format."});
+  const sites=await googleApi(req.user.id,"https://www.googleapis.com/webmasters/v3/sites");
+  if(!(sites.siteEntry||[]).some(s=>s.siteUrl===siteUrl)) return res.status(403).json({error:"This Search Console property is not available to the connected Google account."});
+  const encoded=encodeURIComponent(siteUrl),data=await googleApi(req.user.id,"https://www.googleapis.com/webmasters/v3/sites/"+encoded+"/searchAnalytics/query",{method:"POST",body:JSON.stringify({startDate,endDate,dimensions:["query"],rowLimit:100})});
+  res.json({siteUrl,startDate,endDate,rows:data.rows||[]});
+ }catch(e){res.status(502).json({error:e.message})}
+});
+app.get("/api/google/analytics/report",auth,async(req,res)=>{
+ try{
+  const propertyId=String(req.query.propertyId||""),startDate=String(req.query.startDate||""),endDate=String(req.query.endDate||"");
+  if(!/^\d+$/.test(propertyId)||!validReportDates(startDate,endDate)) return res.status(400).json({error:"Provide a numeric propertyId and dates in YYYY-MM-DD format."});
+  const accounts=await googleApi(req.user.id,"https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200");
+  const allowed=(accounts.accountSummaries||[]).some(a=>(a.propertySummaries||[]).some(p=>p.property==="properties/"+propertyId));
+  if(!allowed) return res.status(403).json({error:"This Analytics property is not available to the connected Google account."});
+  const data=await googleApi(req.user.id,"https://analyticsdata.googleapis.com/v1beta/properties/"+propertyId+":runReport",{method:"POST",body:JSON.stringify({dateRanges:[{startDate,endDate}],dimensions:[{name:"date"}],metrics:[{name:"activeUsers"},{name:"sessions"},{name:"screenPageViews"}],limit:1000})});
+  res.json({propertyId,startDate,endDate,rows:data.rows||[],totals:data.totals||[]});
+ }catch(e){res.status(502).json({error:e.message})}
+});
+
 app.listen(PORT,()=>console.log("Umar SEO AI running at http://localhost:"+PORT));
