@@ -1,7 +1,7 @@
-name: Test
+name: Test and dependency audit
 on:
   push:
-    branches: [feature/umar-seo-agent-v2]
+    branches: [main, "work/**"]
   pull_request:
     branches: [main, master]
 jobs:
@@ -11,6 +11,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install
       - run: npm test
+      - name: Fail on remaining dependency vulnerabilities
+        run: npm audit --audit-level=low
+      - name: Report dependency vulnerabilities
+        run: |
+          npm audit --json > npm-audit.json || true
+          node --input-type=commonjs -e "const a=require('./npm-audit.json'); console.log(JSON.stringify({metadata:a.metadata?.vulnerabilities, packages:Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:x.name)}))},null,2))"
