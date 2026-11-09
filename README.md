@@ -10,6 +10,8 @@ A functional early-stage SEO workspace for website owners. The current implement
 - robots.txt and sitemap inspection when reachable.
 - On-page keyword signal extraction from page titles, descriptions, headings, and visible text.
 - Competitor topic comparison for 1–3 user-supplied competitor websites, showing shared topics and possible topic gaps.
+- Google OAuth connection with Search Console and Google Analytics read-only scopes, CSRF state validation, encrypted refresh-token storage, and disconnect support.
+- Search Console property listing and query-performance API endpoint; Analytics property listing and daily active-user/session/page-view report endpoint.
 - Login/register rate limiting, API rate limiting, security headers, crawl page/time/response-size limits, and basic private-network URL blocking.
 
 ## Keyword and competitor comparison
@@ -24,8 +26,14 @@ Requires Node.js 20 or newer.
 4. Run `npm start`.
 5. Open http://localhost:3000.
 
+## Google Search Console and Analytics connection
+
+Set these deployment environment variables (never commit real values): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `PUBLIC_BASE_URL`, and `GOOGLE_TOKEN_ENCRYPTION_KEY` (exactly 64 hexadecimal characters). Set `PUBLIC_BASE_URL` to the exact HTTPS origin of the deployed app. Add this exact authorized redirect URI to the Google OAuth web client: `https://YOUR-APP-HOST/api/google/callback` (replace the host with the deployed app host). Enable the Google Search Console API, Google Analytics Admin API, and Google Analytics Data API in the same Google Cloud project. The workspace Connect Google button requests only `webmasters.readonly` and `analytics.readonly`. After user consent, refresh tokens are encrypted with AES-256-GCM before storage. The app lists available properties and exposes read-only report endpoints. Google OAuth consent-screen verification/testing-mode restrictions may apply to external users.
+
+API additions (Bearer token required except callback): `POST /api/google/connect`, `GET /api/google/callback`, `GET /api/google/status`, `DELETE /api/google/connection`, `GET /api/google/search-console/sites`, `GET /api/google/analytics/properties`, `GET /api/google/search-console/performance?siteUrl=...&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`, and `GET /api/google/analytics/report?propertyId=...&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`.
+
 ## Umar SEO Agent V2
-The technical audit endpoint also returns an evidence-based SEO action plan (`seoPlan`). Suggestions are derived from the technical audit and require review. The system does not access Search Console or Analytics, obtain verified keyword volumes/rankings, edit customer website files, or publish changes.
+The technical audit endpoint also returns an evidence-based SEO action plan (`seoPlan`). Suggestions are derived from the technical audit and require review. The system does not obtain verified keyword volumes/rankings, edit customer website files, or publish changes.
 
 ## API
 - `POST /api/auth/register`
@@ -39,7 +47,7 @@ The technical audit endpoint also returns an evidence-based SEO action plan (`se
 - `GET /api/health`
 
 ## Not implemented yet
-Google Search Console/Analytics OAuth, external keyword-volume and backlink providers, AI content generation, automatic on-site edits, email verification, password recovery, and production session revocation are not implemented. These require consent, credentials, additional backend work, and testing. Do not treat the current JWT/local-storage login as production-grade authentication.
+External keyword-volume and backlink providers, AI content generation, automatic on-site edits, email verification, password recovery, and production session revocation are not implemented. These require consent, credentials, additional backend work, and testing. Do not treat the current JWT/local-storage login as production-grade authentication.
 
 ## Production warning
 This is an MVP, not ready for unrestricted public production. Before launch, move crawling into an isolated worker with outbound firewall and DNS-rebinding protection, use HTTPS and secure HttpOnly/SameSite cookies with CSRF protection, add account recovery and email verification, a durable queue, monitoring, backups, and independent security review. Never commit `.env` or credentials.
