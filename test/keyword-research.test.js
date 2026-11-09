@@ -1,0 +1,5 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {extractKeywordSignals,compareKeywordCoverage} from "../src/keyword-research.js";
+test("extracts weighted words and phrases from visible page content",()=>{const terms=extractKeywordSignals({title:"Organic Garden Design",headings:["Garden Design Ideas"],bodyText:"Organic garden design helps create healthy gardens."});assert.ok(terms.some(x=>x.term==="garden design"));assert.ok(terms.some(x=>x.term==="organic"));});
+test("reports competitor topics absent from the site without claiming search volume",()=>{const own={website:"https://own.test",pages:[{keywordSignals:[{term:"garden design",score:4}]}]};const competitor={url:"https://rival.test",audit:{pages:[{keywordSignals:[{term:"landscape lighting",score:5},{term:"garden design",score:2}]}]}};const result=compareKeywordCoverage(own,[competitor]);assert.equal(result.mode,"on_page_topic_comparison");assert.ok(result.possibleTopicGaps.some(x=>x.term==="landscape lighting"));assert.ok(result.sharedTopics.some(x=>x.term==="garden design"));assert.ok(result.limitations.some(x=>x.includes("search volume")));});

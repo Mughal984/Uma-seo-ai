@@ -6,11 +6,15 @@ export function normalizeUrl(value){
  u.hash="";return u.toString().replace(/\/$/,"");
 }
 function privateIp(ip){
- if(net.isIPv4(ip)){const p=ip.split(".").map(Number);return p[0]===10||p[0]===127||p[0]===0||p[0]>=224||(p[0]===169&&p[1]===254)||(p[0]===172&&p[1]>=16&&p[1]<=31)||(p[0]===192&&p[1]===168)}
- const s=ip.toLowerCase();return s==="::"||s==="::1"||s.startsWith("fc")||s.startsWith("fd")||s.startsWith("fe8")||s.startsWith("fe9")||s.startsWith("fea")||s.startsWith("feb");
+ if(net.isIPv4(ip)){
+  const p=ip.split(".").map(Number),a=p[0],b=p[1],c=p[2];
+  return a===0||a===10||a===127||a>=224||(a===100&&b>=64&&b<=127)||(a===169&&b===254)||(a===172&&b>=16&&b<=31)||(a===192&&(b===0||b===168||b===88&&c===99||b===0&&c===2))||(a===198&&(b===18||b===19||b===51&&c===100))||(a===203&&b===0&&c===113)||a>=240;
+ }
+ const s=ip.toLowerCase();
+ return s==="::"||s==="::1"||s.startsWith("::ffff:")||s.startsWith("fc")||s.startsWith("fd")||/^fe[89ab]/.test(s)||s.startsWith("ff")||s.startsWith("2001:db8:");
 }
 export async function checkPublicHost(value){
- const host=new URL(value).hostname.toLowerCase();
+ const host=new URL(value).hostname.toLowerCase().replace(/^\[|\]$/g,"");
  if(host==="localhost"||host.endsWith(".localhost")||host.endsWith(".local"))throw new Error("Local/private hosts are blocked.");
  if(net.isIP(host)){if(privateIp(host))throw new Error("Private IP addresses are blocked.");return;}
  const records=await dns.lookup(host,{all:true});
