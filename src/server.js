@@ -65,7 +65,7 @@ async function googleApi(userId,url,options={}){
  if(!response.ok) throw new Error("Google API request failed ("+response.status+"). Check that the Search Console and Analytics APIs are enabled and the selected property is accessible.");
  return data;
 }
-const validReportDates=(start,end)=>/^\\d{4}-\\d{2}-\\d{2}$/.test(start||"")&&/^\\d{4}-\\d{2}-\\d{2}$/.test(end||"")&&start<=end;
+const validReportDates=(start,end)=>/^\d{4}-\d{2}-\d{2}$/.test(start||"")&&/^\d{4}-\d{2}-\d{2}$/.test(end||"")&&start<=end;
 app.post("/api/google/connect",auth,async(req,res)=>{
  try{
   const cfg=googleConfig(),nonce=crypto.randomBytes(32).toString("hex"),expires=Date.now()+10*60*1000;
@@ -123,7 +123,7 @@ app.get("/api/google/search-console/performance",auth,async(req,res)=>{
 app.get("/api/google/analytics/report",auth,async(req,res)=>{
  try{
   const propertyId=String(req.query.propertyId||""),startDate=String(req.query.startDate||""),endDate=String(req.query.endDate||"");
-  if(!/^\\d+$/.test(propertyId)||!validReportDates(startDate,endDate)) return res.status(400).json({error:"Provide a numeric propertyId and dates in YYYY-MM-DD format."});
+  if(!/^\d+$/.test(propertyId)||!validReportDates(startDate,endDate)) return res.status(400).json({error:"Provide a numeric propertyId and dates in YYYY-MM-DD format."});
   const accounts=await googleApi(req.user.id,"https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200");
   const allowed=(accounts.accountSummaries||[]).some(a=>(a.propertySummaries||[]).some(p=>p.property==="properties/"+propertyId));
   if(!allowed) return res.status(403).json({error:"This Analytics property is not available to the connected Google account."});
