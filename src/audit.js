@@ -40,7 +40,7 @@ export async function auditWebsite(input){
    p.openGraphDescription=$('meta[property="og:description"]').length>0;
    p.structuredDataBlocks=$('script[type="application/ld+json"]').length;
    p.wordCount=$("body").text().replace(/\s+/g," ").trim().split(" ").filter(Boolean).length;
-   p.canonical=p.canonical?new URL(p.canonical,url).toString():"";
+   if(p.canonical){try{p.canonical=new URL(p.canonical,url).toString()}catch{add(issues,"medium",url,"Canonical URL is malformed",{canonical:p.canonical});p.canonical=""}}
    $("a[href]").each((_,e)=>{try{const u=new URL($(e).attr("href"),url);if(u.origin===origin&&["http:","https:"].includes(u.protocol)){u.hash="";const v=u.toString().replace(/\/$/,"");if(!seen.has(v)&&queue.length<MAX*3)queue.push(v)}}catch{}});
    if(!p.title)add(issues,"high",url,"Missing page title");
    else if(p.title.length>60)add(issues,"low",url,"Page title is longer than the common 50–60 character display range",{observedLength:p.title.length});
