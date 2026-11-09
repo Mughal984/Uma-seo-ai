@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import {normalizeUrl,checkPublicHost} from "./security.js";
+import {extractKeywordSignals} from "./keyword-research.js";
 const MAX=Math.min(20,Math.max(1,Number(process.env.CRAWL_MAX_PAGES||10)));
 const TIMEOUT=Number(process.env.CRAWL_TIMEOUT_MS||10000);
 const MAX_BYTES=2000000;
@@ -28,7 +29,7 @@ export async function auditWebsite(input){
   const url=queue.shift();if(seen.has(url))continue;seen.add(url);let f;
   try{f=await fetchPage(url)}catch(e){add(issues,"warning",url,"Fetch failed: "+e.message);continue}
   if(f.redirect){add(issues,"info",url,"Redirects to "+f.redirect);continue}
-  const p={url,status:f.status,title:"",description:"",h1Count:0,noindex:false,imagesMissingAlt:0,canonical:"",language:"",hasViewport:false,openGraphTitle:false,openGraphDescription:false,structuredDataBlocks:0,wordCount:0};
+  const p={url,status:f.status,title:"",description:"",h1Count:0,noindex:false,imagesMissingAlt:0,canonical:"",language:"",hasViewport:false,openGraphTitle:false,openGraphDescription:false,structuredDataBlocks:0,wordCount:0,keywordSignals:[]};
   if(f.html){
    const $=cheerio.load(f.html);p.title=$("title").first().text().trim();p.description=$('meta[name="description" i]').attr("content")||"";
    p.h1Count=$("h1").length;p.noindex=/noindex/i.test($('meta[name="robots" i]').attr("content")||"");
@@ -39,7 +40,9 @@ export async function auditWebsite(input){
    p.openGraphTitle=$('meta[property="og:title"]').length>0;
    p.openGraphDescription=$('meta[property="og:description"]').length>0;
    p.structuredDataBlocks=$('script[type="application/ld+json"]').length;
-   p.wordCount=$("body").text().replace(/\s+/g," ").trim().split(" ").filter(Boolean).length;
+   const bodyText=$("body").text().replace(/\s+/g," ").trim();
+   p.wordCount=bodyText.split(" ").filter(Boolean).length;
+   p.keywordSignals=extractKeywordSignals({title:p.title,description:p.description,headings:$("h1,h2,h3").map((_,e)=>$(e).text()).get(),bodyText:bodyText.slice(0,20000)});
    if(p.canonical){try{p.canonical=new URL(p.canonical,url).toString()}catch{add(issues,"medium",url,"Canonical URL is malformed",{canonical:p.canonical});p.canonical=""}}
    $("a[href]").each((_,e)=>{try{const u=new URL($(e).attr("href"),url);if(u.origin===origin&&["http:","https:"].includes(u.protocol)){u.hash="";const v=u.toString().replace(/\/$/,"");if(!seen.has(v)&&queue.length<MAX*3)queue.push(v)}}catch{}});
    if(!p.title)add(issues,"high",url,"Missing page title");
