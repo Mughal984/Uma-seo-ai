@@ -11,6 +11,7 @@ A functional early-stage SEO workspace for website owners. The current implement
 - On-page keyword signal extraction from page titles, descriptions, headings, and visible text.
 - Competitor topic comparison for 1–3 user-supplied competitor websites, showing shared topics and possible topic gaps.
 - Google OAuth connection with Search Console and Google Analytics read-only scopes, CSRF state validation, encrypted refresh-token storage, and disconnect support.
+- Optional Gemini-powered SEO article drafts based on the latest site audit; drafts are never auto-published.
 - Search Console property listing and query-performance API endpoint; Analytics property listing and daily active-user/session/page-view report endpoint.
 - Login/register rate limiting, API rate limiting, security headers, crawl page/time/response-size limits, and basic private-network URL blocking.
 
@@ -31,6 +32,10 @@ Requires Node.js 20 or newer.
 Set these deployment environment variables (never commit real values): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `PUBLIC_BASE_URL`, and `GOOGLE_TOKEN_ENCRYPTION_KEY` (exactly 64 hexadecimal characters). Set `PUBLIC_BASE_URL` to the exact HTTPS origin of the deployed app. Add this exact authorized redirect URI to the Google OAuth web client: `https://YOUR-APP-HOST/api/google/callback` (replace the host with the deployed app host). Enable the Google Search Console API, Google Analytics Admin API, and Google Analytics Data API in the same Google Cloud project. The workspace Connect Google button requests only `webmasters.readonly` and `analytics.readonly`. After user consent, refresh tokens are encrypted with AES-256-GCM before storage. The app lists available properties and exposes read-only report endpoints. Google OAuth consent-screen verification/testing-mode restrictions may apply to external users.
 
 API additions (Bearer token required except callback): `POST /api/google/connect`, `GET /api/google/callback`, `GET /api/google/status`, `DELETE /api/google/connection`, `GET /api/google/search-console/sites`, `GET /api/google/analytics/properties`, `GET /api/google/search-console/performance?siteUrl=...&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`, and `GET /api/google/analytics/report?propertyId=...&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`.
+
+## Gemini AI content drafts
+
+Set `GEMINI_API_KEY` as a server-side secret (never commit it to GitHub). Optionally set `GEMINI_MODEL`; the default is `gemini-2.5-flash`. Run a technical audit, enter a topic on the project card, and choose Generate AI content draft. The endpoint uses the latest saved audit as context and returns a draft only; it does not edit or publish the customer website. Provider quotas, pricing, model availability, and regional eligibility are controlled by Google and may change.
 
 ## Umar SEO Agent V2
 The technical audit endpoint also returns an evidence-based SEO action plan (`seoPlan`). Suggestions are derived from the technical audit and require review. The system does not obtain verified keyword volumes/rankings, edit customer website files, or publish changes.
