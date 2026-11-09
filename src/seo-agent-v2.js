@@ -74,6 +74,30 @@ function classifyIssue(issueText) {
       risk: "low"
     };
   }
+  if (/canonical/i.test(issue)) {
+    return { category: "indexability", priority: "medium", task: "Add one valid absolute canonical URL for this page, normally pointing to its preferred URL. Check that it returns HTTP 200 and does not create a redirect or loop.", approvalRequired: true, risk: "medium" };
+  }
+  if (/robots\.txt|sitemap/i.test(issue)) {
+    return { category: "crawlability", priority: "medium", task: "Check the reported robots.txt or sitemap URL, correct its response and syntax, then verify that the sitemap contains canonical URLs intended for indexing. Do not block important pages.", approvalRequired: true, risk: "medium" };
+  }
+  if (/mobile viewport/i.test(issue)) {
+    return { category: "mobile", priority: "medium", task: 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> inside the document head and verify the page at mobile widths.', approvalRequired: true, risk: "low" };
+  }
+  if (/lang attribute/i.test(issue)) {
+    return { category: "accessibility", priority: "low", task: 'Set the html element language, for example <html lang="en">, using the page primary language.', approvalRequired: true, risk: "low" };
+  }
+  if (/open graph/i.test(issue)) {
+    return { category: "social_metadata", priority: "low", task: 'Add page-specific og:title and og:description meta tags in the head; use an accurate title and summary matching the visible page.', approvalRequired: true, risk: "low" };
+  }
+  if (/structured data/i.test(issue)) {
+    return { category: "structured_data", priority: "low", task: "Consider adding valid JSON-LD only when a supported schema type accurately describes the page. Validate the markup before publishing; structured data is optional for many pages.", approvalRequired: true, risk: "low" };
+  }
+  if (/word(s)?|content/i.test(issue) && /fewer than 100/i.test(issue)) {
+    return { category: "content_quality", priority: "info", task: "Review whether the page fully answers its intended visitor need. Add genuinely useful information only where needed; do not add filler just to reach a word count.", approvalRequired: true, risk: "low" };
+  }
+  if (/longer than the common/i.test(issue)) {
+    return { category: "on_page", priority: "low", task: "Review the title or description for concise, page-specific wording. Character ranges are guidelines, not strict ranking rules; preserve clarity and accuracy.", approvalRequired: true, risk: "low" };
+  }
   if (/redirects to/i.test(issue)) {
     return {
       category: "technical",
