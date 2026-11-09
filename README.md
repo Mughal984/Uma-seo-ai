@@ -1,26 +1,36 @@
-# Umar SEO AI
+# Umar SEO AI — working MVP
 
-An AI-assisted SEO workspace for website owners.
+A functional early-stage SEO workspace for website owners. The current implementation is intentionally evidence-first and does not fabricate rankings, traffic, keyword volumes, or connected integrations.
 
-## Project status
+## Implemented
+- Email/password registration and login (bcrypt password hashing; signed JWT bearer tokens).
+- SQLite persistence for users, projects, and audit history.
+- Add a website project.
+- Owner-initiated, limited same-domain technical SEO crawl.
+- Checks page title, meta description, H1 count, noindex directive, missing image alt text, HTTP errors, and internal links.
+- API rate limiting, security headers, crawl page/time/response-size limits, and basic private-network URL blocking.
 
-This repository is being initialized. The first implementation will prioritize a secure, honest foundation: real workflows, transparent empty states, and no fabricated analytics or placeholder actions.
+## Run locally
+Requires Node.js 20 or newer.
 
-## Planned capabilities
+1. Run `npm install`.
+2. Copy `.env.example` to `.env`.
+3. Set `JWT_SECRET` to a random value of at least 32 characters.
+4. Run `npm start`.
+5. Open http://localhost:3000.
 
-- Website onboarding and ownership verification
-- Technical SEO audits with evidence and severity
-- Keyword and competitor research
-- Metadata and content workflows with human approval
-- Search performance monitoring through authorized integrations
+## API
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/me` (Bearer token)
+- `GET /api/projects` (Bearer token)
+- `POST /api/projects` (Bearer token; JSON: name, url)
+- `POST /api/projects/:id/audit` (Bearer token)
+- `GET /api/projects/:id/audits` (Bearer token)
+- `GET /api/health`
 
-## Security principles
+## Not implemented yet
+Google Search Console/Analytics OAuth, keyword-volume and backlink providers, AI content generation, competitor data providers, automatic on-site edits, email verification, password recovery, and production session revocation are not implemented. These require consent, credentials, additional backend work, and testing. Do not treat the current JWT/local-storage login as production-grade authentication.
 
-- Never commit API keys, passwords, OAuth tokens, or customer secrets.
-- Request only the permissions needed for each integration.
-- Require explicit approval before making changes to a customer's website.
-- Clearly label unavailable or unconnected data; never invent metrics.
-
-## Development
-
-Implementation details, setup instructions, tests, and deployment requirements will be documented as the project is built.
+## Production warning
+This is an MVP, not ready for unrestricted public production. Before launch, move crawling into an isolated worker with outbound firewall and DNS-rebinding protection, use HTTPS and secure HttpOnly/SameSite cookies with CSRF protection, add account recovery and email verification, a durable queue, monitoring, backups, and independent security review. Never commit `.env` or credentials.
