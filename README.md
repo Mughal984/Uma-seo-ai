@@ -7,7 +7,7 @@ A functional early-stage SEO workspace for website owners. The current implement
 - SQLite persistence for users, projects, and audit history.
 - Add a website project.
 - Owner-initiated, limited same-domain technical SEO crawl.
-- Checks page title, meta description, H1 count, noindex directive, missing image alt text, HTTP errors, and internal links.
+- Checks page title and description, H1 count, noindex, canonical URL, image alt text, HTTP errors, HTML language, mobile viewport, Open Graph metadata, JSON-LD presence, and rough visible word count. Also inspects robots.txt and a sitemap URL when reachable.
 - API rate limiting, security headers, crawl page/time/response-size limits, and basic private-network URL blocking.
 
 ## Run locally
@@ -21,7 +21,7 @@ Requires Node.js 20 or newer.
 
 ## Umar SEO Agent V2
 
-The technical audit endpoint also returns an evidence-based SEO action plan (`seoPlan`). The workspace displays suggested tasks sorted by priority, including the affected page, category, and whether approval is required. The plan is derived only from the existing technical audit findings. It does not independently crawl, access Search Console or Analytics, research keywords or competitors, edit website files, or publish changes. All website changes remain manual and require review.
+The technical audit endpoint also returns an evidence-based SEO action plan (`seoPlan`). The workspace displays suggested tasks sorted by priority, including the affected page, category, and whether approval is required. The plan is derived only from findings returned by the technical audit and provides suggested next steps. It does not independently access Search Console or Analytics, obtain verified keyword volumes/rankings, research competitors, edit customer website files, or publish changes. All website changes remain manual and require review.
 
 ## API
 - `POST /api/auth/register`
