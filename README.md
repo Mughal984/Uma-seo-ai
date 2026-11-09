@@ -43,3 +43,6 @@ Google Search Console/Analytics OAuth, external keyword-volume and backlink prov
 
 ## Production warning
 This is an MVP, not ready for unrestricted public production. Before launch, move crawling into an isolated worker with outbound firewall and DNS-rebinding protection, use HTTPS and secure HttpOnly/SameSite cookies with CSRF protection, add account recovery and email verification, a durable queue, monitoring, backups, and independent security review. Never commit `.env` or credentials.
+
+## Tests
+Run `npm test` to execute the keyword comparison, SEO action-plan, and crawler URL-safety regression tests.
