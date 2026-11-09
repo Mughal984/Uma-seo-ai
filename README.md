@@ -19,6 +19,10 @@ Requires Node.js 20 or newer.
 4. Run `npm start`.
 5. Open http://localhost:3000.
 
+## Umar SEO Agent V2
+
+The technical audit endpoint also returns an evidence-based SEO action plan (`seoPlan`). The workspace displays suggested tasks sorted by priority, including the affected page, category, and whether approval is required. The plan is derived only from the existing technical audit findings. It does not independently crawl, access Search Console or Analytics, research keywords or competitors, edit website files, or publish changes. All website changes remain manual and require review.
+
 ## API
 - `POST /api/auth/register`
 - `POST /api/auth/login`
