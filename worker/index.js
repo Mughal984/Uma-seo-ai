@@ -215,11 +215,14 @@ async function route(request, env) {
 export default {
   async fetch(request, env) {
     try {
+      const pathname = new URL(request.url).pathname;
+      if (!pathname.startsWith("/api/")) {
+        if (env.ASSETS) return await env.ASSETS.fetch(request);
+        return fail("Static assets binding ASSETS is missing.", 503);
+      }
       if (!env.DB) return fail("D1 database binding DB is missing.", 503);
       if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) return fail("JWT_SECRET must be configured with at least 32 characters.", 503);
-      if (new URL(request.url).pathname.startsWith("/api/")) return await route(request, env);
-      if (env.ASSETS) return await env.ASSETS.fetch(request);
-      return fail("Static assets binding ASSETS is missing.", 503);
+      return await route(request, env);
     } catch (error) {
       console.error("UMA SEO AI Worker error:", error);
       return fail("Internal server error.", 500);
