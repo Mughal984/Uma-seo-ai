@@ -1,7 +1,7 @@
 name: Test and dependency audit
 on:
   push:
-    branches: [main, "work/**"]
+    branches: [main, "work/**", "cloudflare-free-migration"]
   pull_request:
     branches: [main, master]
 jobs:
