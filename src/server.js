@@ -12,8 +12,12 @@ import {compareKeywordCoverage} from "./keyword-research.js";
 import {generateGeminiText} from "./gemini.js";
 import {canTransitionTaskStatus} from "./task-queue.js";
 import crypto from "node:crypto";
-import {encryptGoogleToken,decryptGoogleToken} from "./google-integration.js";\nimport {createSelfHealingSupervisor} from "./self-healing.js";
-const app=express(),PORT=Number(process.env.PORT||3000),SECRET=process.env.JWT_SECRET;\nconst selfHealing=createSelfHealingSupervisor({all,run});
+import {encryptGoogleToken,decryptGoogleToken} from "./google-integration.js";
+import {createSelfHealingSupervisor} from "./self-healing.js";
+import {createSelfRepairEngine} from "./self-repair.js";
+const app=express(),PORT=Number(process.env.PORT||3000),SECRET=process.env.JWT_SECRET;
+const selfHealing=createSelfHealingSupervisor({all,run});
+const selfRepair=createSelfRepairEngine({generateText:generateGeminiText});
 if(!SECRET||SECRET.length<32){console.error("Set JWT_SECRET to at least 32 characters in .env");process.exit(1)}
 app.use(helmet({contentSecurityPolicy:false}));app.use(express.json({limit:"100kb"}));app.use(express.static("public"));
 app.use("/api",rateLimit({windowMs:900000,limit:100,standardHeaders:true,legacyHeaders:false}));
@@ -88,7 +92,25 @@ app.patch("/api/projects/:id/tasks/:taskId",auth,async(req,res)=>{
  res.json({id:task.id,status:next,websiteChanged:false,message:next==="approved"?"Approval saved. Website changes have not been applied.":"Task dismissed."});
 });
 app.get("/api/projects/:id/audits",auth,async(req,res)=>{const p=await get("SELECT id FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const rows=await all("SELECT id,result_json,created_at FROM audits WHERE project_id=? ORDER BY id DESC LIMIT 10",[p.id]);res.json({audits:rows.map(x=>({id:x.id,createdAt:x.created_at,result:JSON.parse(x.result_json)}))})});
-app.get("/api/health",(req,res)=>res.json({status:"ok",product:"Umar SEO AI"}));\napp.get("/api/system/self-healing",auth,(req,res)=>{const s=selfHealing.snapshot();res.json({status:s.status,startedAt:s.startedAt,lastCheckAt:s.lastCheckAt,lastSuccessAt:s.lastSuccessAt,checks:s.checks,recoveries:s.recoveries,failures:s.failures});});
+app.get("/api/health",(req,res)=>res.json({status:"ok",product:"Umar SEO AI"}));
+app.get("/api/system/self-healing",auth,(req,res)=>{const s=selfHealing.snapshot();res.json({status:s.status,startedAt:s.startedAt,lastCheckAt:s.lastCheckAt,lastSuccessAt:s.lastSuccessAt,checks:s.checks,recoveries:s.recoveries,failures:s.failures});});
+app.post("/api/system/self-repair",async(req,res)=>{
+ const configured=process.env.SELF_REPAIR_KEY||"";
+ const supplied=String(req.headers["x-self-repair-key"]||"");
+ const configuredBytes=Buffer.from(configured),suppliedBytes=Buffer.from(supplied);
+ if(configuredBytes.length<32||suppliedBytes.length!==configuredBytes.length||!crypto.timingSafeEqual(suppliedBytes,configuredBytes)){
+  return res.status(404).json({error:"Not found."});
+ }
+ try{
+  const diagnostics=String(req.body?.diagnostics||"").slice(0,8000);
+  if(!diagnostics.trim())return res.status(400).json({error:"Provide a concise diagnostic report."});
+  const result=await selfRepair.repair({diagnostics});
+  res.json({...result,restartRequired:result.applied===true});
+ }catch(error){
+  console.error("Self-repair failed:",String(error?.message||"unknown").slice(0,300));
+  res.status(503).json({applied:false,error:"Self-repair could not safely complete. No unverified repair was accepted."});
+ }
+});
 
 const GOOGLE_SCOPES = [
  "https://www.googleapis.com/auth/webmasters.readonly",
@@ -185,4 +207,11 @@ app.get("/api/google/analytics/report",auth,async(req,res)=>{
  }catch(e){res.status(502).json({error:e.message})}
 });
 
-app.listen(PORT,()=>{\n console.log("Umar SEO AI running at http://localhost:"+PORT);\n selfHealing.start();\n});\n\nfor(const signal of ["SIGINT","SIGTERM"]){\n process.once(signal,()=>{selfHealing.stop();process.exit(0)});\n}
+app.listen(PORT,()=>{
+ console.log("Umar SEO AI running at http://localhost:"+PORT);
+ selfHealing.start();
+});
+
+for(const signal of ["SIGINT","SIGTERM"]){
+ process.once(signal,()=>{selfHealing.stop();process.exit(0)});
+}
