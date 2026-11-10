@@ -12,7 +12,7 @@ A functional early-stage SEO workspace for website owners. The current implement
 - Competitor topic comparison for 1–3 user-supplied competitor websites, showing shared topics and possible topic gaps.
 - Google OAuth connection with Search Console and Google Analytics read-only scopes, CSRF state validation, encrypted refresh-token storage, and disconnect support.
 - Optional Gemini-powered SEO article drafts based on the latest site audit; drafts are never auto-published.
-- Persistent per-project SEO task history generated from audits, with owner approval or dismissal recorded in SQLite.
+- Persistent per-project SEO task history generated from audits, with owner approval or dismissal recorded in SQLite.\n- Runtime self-healing supervisor: periodic SQLite integrity checks, safe cleanup of expired one-time OAuth states, bounded event history, degraded/healthy status, and authenticated diagnostics.
 - Search Console property listing and query-performance API endpoint; Analytics property listing and daily active-user/session/page-view report endpoint.
 - Login/register rate limiting, API rate limiting, security headers, crawl page/time/response-size limits, and basic private-network URL blocking.
 
@@ -52,7 +52,7 @@ The technical audit endpoint also returns an evidence-based SEO action plan (`se
 - `GET /api/projects/:id/audits` (Bearer token); `GET /api/projects/:id/tasks` and `PATCH /api/projects/:id/tasks/:taskId` (Bearer token; status `approved` or `dismissed`)
 - `GET /api/health`
 
-## Not implemented yet
+## Runtime self-healing\n\nThe server starts a background supervisor that checks SQLite integrity every 60 seconds, removes expired one-time Google OAuth state records, records a bounded history of recovery/error events, and exposes authenticated diagnostics at `GET /api/system/self-healing`. This is runtime health monitoring and limited safe recovery; it does not rewrite its own source code, restart a failed host, repair corrupted databases automatically, or modify customer websites. Those operations require a separate deployment supervisor, verified backups, staged patches, tests, and rollback controls.\n\n## Not implemented yet
 External keyword-volume and backlink providers, automatic on-site edits, email verification, password recovery, and production session revocation are not implemented. Task approval records owner decisions but does not itself modify a customer website; actual edits require a verified website platform/repository connector and a tested deployment path. These require consent, credentials, additional backend work, and testing. Do not treat the current JWT/local-storage login as production-grade authentication.
 
 ## Production warning
