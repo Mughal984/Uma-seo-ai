@@ -134,5 +134,9 @@ export function createSelfRepairEngine({ root = process.cwd(), generateText, run
     }
   }
 
-  return { repair };
+  async function validate() {
+    return runTests(root);
+  }
+
+  return { repair, validate };
 }
