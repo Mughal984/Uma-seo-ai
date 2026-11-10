@@ -11,6 +11,7 @@ This branch contains a Workers-native API and the existing browser dashboard ser
 - Proposed SEO task records with approve/dismiss workflow (approval does not edit a site)
 - Competitor title/meta topic comparison (not live keyword-volume/ranking data)
 - Gemini content draft generation (draft only; never publishes)
+- Google OAuth connection with one-time signed state, AES-GCM encrypted refresh tokens and read-only Search Console / Analytics endpoints
 - Static dashboard assets served from `public/`
 - GitHub Actions test and dependency-audit workflow
 
@@ -36,7 +37,7 @@ Do not describe this migration as a fully autonomous SEO agent yet. The crawler 
 
 The Cloudflare dashboard and provider terms determine current free-tier limits. Usage can exceed free allowances; check the account's usage before deployment. Never commit API keys or paste them into chat.
 
-## Local checks
+## Google endpoints\n\n- `POST /api/google/connect` starts OAuth.\n- `GET /api/google/callback` validates and consumes one-time OAuth state, then stores the refresh token encrypted with AES-GCM.\n- `GET /api/google/status` and `DELETE /api/google/connection` manage the user's connection.\n- `GET /api/google/search-console/sites` lists accessible properties.\n- `GET /api/google/search-console/performance?siteUrl=...&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` retrieves query performance.\n- `GET /api/google/analytics/properties` lists GA4 properties.\n- `GET /api/google/analytics/report?propertyId=...&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` retrieves active users, sessions and page views.\n\nGoogle APIs are read-only. This integration cannot edit Search Console or Analytics settings.\n\n## Local checks
 
 - Run the repository tests with `npm test`.
 - Use `npx wrangler dev` after configuring a local D1 database and the required local secrets.
