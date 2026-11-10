@@ -47,8 +47,10 @@ export async function verifyState(token, secret) {
   let header, payload;
   try { header = JSON.parse(dec.decode(fromB64url(parts[0]))); payload = JSON.parse(dec.decode(fromB64url(parts[1]))); } catch { return null; }
   if (header.alg !== "HS256" || payload.iss !== "umar-seo-ai-google" || !payload.uid || !payload.nonce || !Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now()/1000)) return null;
-  const valid = await crypto.subtle.verify("HMAC", await stateKey(secret), fromB64url(parts[2]), enc.encode(parts[0] + "." + parts[1]));
-  return valid ? payload : null;
+  try {
+    const valid = await crypto.subtle.verify("HMAC", await stateKey(secret), fromB64url(parts[2]), enc.encode(parts[0] + "." + parts[1]));
+    return valid ? payload : null;
+  } catch { return null; }
 }
 async function encryptionKey(hex) {
   const raw = Uint8Array.from(hex.match(/.{2}/g), x => parseInt(x, 16));
@@ -129,6 +131,7 @@ export async function handleGoogleRoute(request, env, user) {
     try {
       const cfg = googleConfig(request, env);
       const nonce = randomHex(32), expiresAt = Date.now() + 10 * 60 * 1000;
+      await env.DB.prepare("DELETE FROM google_oauth_states WHERE expires_at < ?").bind(Date.now()).run();
       await env.DB.prepare("INSERT INTO google_oauth_states(nonce,user_id,expires_at) VALUES(?,?,?)").bind(nonce, user.id, expiresAt).run();
       const state = await signState({ uid: user.id, nonce, iss: "umar-seo-ai-google", iat: Math.floor(Date.now()/1000), exp: Math.floor(expiresAt/1000) }, env.JWT_SECRET);
       const params = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: "code", scope: SCOPES.join(" "), access_type: "offline", include_granted_scopes: "true", prompt: "consent", state });
