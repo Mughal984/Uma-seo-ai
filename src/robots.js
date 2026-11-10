@@ -1,8 +1,10 @@
 const BOT = "umarseoai";
 
 function wildcardPattern(value) {
-  const escaped = value.replace(/[.+^{}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-  return new RegExp("^" + escaped + (value.endsWith("$") ? "" : ".*") + "$");
+  const anchored = value.endsWith("$");
+  const body = anchored ? value.slice(0, -1) : value;
+  const escaped = [...body].map(char => ".+?^${}()|[]\\".includes(char) ? "\\" + char : char).join("").replaceAll("*", ".*");
+  return new RegExp("^" + escaped + (anchored ? "" : ".*") + "$");
 }
 
 export function parseRobotsTxt(source = "", userAgent = BOT) {

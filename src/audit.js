@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import {normalizeUrl,safeFetch} from "./security.js";
 import {extractKeywordSignals} from "./keyword-research.js";
 import {readTextLimited} from "./http-utils.js";
+import {parseRobotsTxt,isAllowedByRobots} from "./robots.js";
 const MAX=Math.min(20,Math.max(1,Number(process.env.CRAWL_MAX_PAGES||10)));
 const TIMEOUT=Number(process.env.CRAWL_TIMEOUT_MS||10000);
 const MAX_BYTES=2000000;
@@ -22,12 +23,20 @@ async function fetchText(url){
 function add(issues,severity,page,issue,details={}){issues.push({severity,page,issue,...details})}
 export async function auditWebsite(input){
  const start=normalizeUrl(input),origin=new URL(start).origin,queue=[start],seen=new Set(),pages=[],issues=[];
- let robots={status:"not_checked",sitemapUrls:[]},sitemap={status:"not_checked",url:new URL("/sitemap.xml",origin).toString(),urlCount:null};
- try{const r=await fetchText(new URL("/robots.txt",origin).toString());robots.status=r.status;if(r.status===200){for(const line of r.body.split(/\r?\n/)){const m=line.match(/^\s*sitemap:\s*(\S+)/i);if(m)robots.sitemapUrls.push(m[1])}}else add(issues,"medium",robots.url,"robots.txt is not available (HTTP "+r.status+")")}catch(e){robots.status="fetch_failed";add(issues,"warning",new URL("/robots.txt",origin).toString(),"Could not inspect robots.txt: "+e.message)}
+ let robots={status:"not_checked",sitemapUrls:[],rules:[]},sitemap={status:"not_checked",url:new URL("/sitemap.xml",origin).toString(),urlCount:null};
+ try{
+  const robotsUrl=new URL("/robots.txt",origin).toString(),r=await fetchText(robotsUrl);
+  robots.status=r.status;
+  if(r.status===200){const parsed=parseRobotsTxt(r.body);robots.sitemapUrls=parsed.sitemaps;robots.rules=parsed.rules}
+  else add(issues,"medium",robotsUrl,"robots.txt is not available (HTTP "+r.status+")");
+ }catch(e){robots.status="fetch_failed";add(issues,"warning",new URL("/robots.txt",origin).toString(),"Could not inspect robots.txt: "+e.message)}
  const sitemapUrl=robots.sitemapUrls[0]||sitemap.url;sitemap.url=sitemapUrl;
  try{const r=await fetchText(sitemapUrl);sitemap.status=r.status;if(r.status===200){const matches=r.body.match(/<loc>\s*[^<]+\s*<\/loc>/gi)||[];sitemap.urlCount=matches.length;if(!matches.length)add(issues,"medium",sitemapUrl,"Sitemap returned no readable <loc> URLs")}else add(issues,"medium",sitemapUrl,"Sitemap is not available (HTTP "+r.status+")")}catch(e){sitemap.status="fetch_failed";add(issues,"warning",sitemapUrl,"Could not inspect sitemap: "+e.message)}
  while(queue.length&&pages.length<MAX){
-  const url=queue.shift();if(seen.has(url))continue;seen.add(url);let f;
+  const url=queue.shift();if(seen.has(url))continue;seen.add(url);
+  const parsedUrl=new URL(url);
+  if(!isAllowedByRobots(parsedUrl.pathname+parsedUrl.search,robots.rules)){add(issues,"info",url,"Skipped by robots.txt Disallow rule");continue}
+  let f;
   try{f=await fetchPage(url)}catch(e){add(issues,"warning",url,"Fetch failed: "+e.message);continue}
   if(f.redirect){add(issues,"info",url,"Redirects to "+f.redirect);continue}
   const p={url,status:f.status,title:"",description:"",h1Count:0,noindex:false,imagesMissingAlt:0,canonical:"",language:"",hasViewport:false,openGraphTitle:false,openGraphDescription:false,structuredDataBlocks:0,wordCount:0,keywordSignals:[]};
