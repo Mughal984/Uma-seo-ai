@@ -15,4 +15,6 @@ CREATE TABLE IF NOT EXISTS audits(id INTEGER PRIMARY KEY,project_id INTEGER NOT 
 CREATE TABLE IF NOT EXISTS seo_tasks(id INTEGER PRIMARY KEY,project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,audit_id INTEGER NOT NULL REFERENCES audits(id) ON DELETE CASCADE,task_key TEXT NOT NULL,action_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed','approved','dismissed')),created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(audit_id,task_key));
 CREATE TABLE IF NOT EXISTS google_connections(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,refresh_token_enc TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS google_oauth_states(nonce TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS system_events(id INTEGER PRIMARY KEY,level TEXT NOT NULL,event TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS idx_system_events_created_at ON system_events(created_at);
 `,e=>e?reject(e):resolve()));
