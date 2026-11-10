@@ -107,11 +107,11 @@ async function route(request, env) {
     const proposals = [];
     for (const issue of result.issues) {
       const taskKey = issue.severity + ":" + issue.page + ":" + issue.issue;
-      const action = { title: issue.issue, severity: issue.severity, page: issue.page, description: "Review this finding and make a site-specific correction. No website change is made automatically." };
+      const action = { title: issue.issue, task: issue.issue, severity: issue.severity, priority: issue.severity, category: "Technical SEO", page: issue.page, description: "Review this finding and make a site-specific correction. No website change is made automatically." };
       const inserted = await env.DB.prepare("INSERT OR IGNORE INTO seo_tasks(project_id,audit_id,task_key,action_json,status) VALUES(?,?,?,?, 'proposed')").bind(projectId, saved.meta.last_row_id, taskKey, JSON.stringify(action)).run();
       if (inserted.meta.changes) proposals.push(action);
     }
-    return json({ auditId: saved.meta.last_row_id, result, proposedTasks: proposals.length, message: "Audit saved. Proposed tasks require review; no website changes were applied." }, 201);
+    return json({ auditId: saved.meta.last_row_id, audit: result, seoPlan: { summary: { total: result.issues.length, awaitingApproval: proposals.length }, actions: result.issues.map(issue => ({ priority: issue.severity, category: "Technical SEO", task: issue.issue, page: issue.page })) }, proposedTasks: proposals.length, message: "Audit saved. Proposed tasks require review; no website changes were applied." }, 201);
   }
   const keywordMatch = path.match(/^\/api\/projects\/(\d+)\/keyword-research$/);
   if (request.method === "POST" && keywordMatch) {
@@ -142,9 +142,12 @@ async function route(request, env) {
       }
       return counts;
     };
-    const ownTerms = terms(own), rivalTerms = rivals.map(terms), combined = new Map();
-    for (const map of rivalTerms) for (const [term, count] of map) if (!ownTerms.has(term)) combined.set(term, (combined.get(term) || 0) + count);
-    return json({ report: { mode: "on_page_title_description_comparison", website: project.url, competitors: urls, websiteTopics: [...ownTerms.keys()].slice(0, 20), possibleTopicGaps: [...combined].sort((a,b)=>b[1]-a[1]).slice(0,20).map(([term,competitorCount])=>({term,competitorCount})), limitations: ["Only titles and meta descriptions from up to 8 pages per site are compared.", "No search volume, keyword difficulty, rankings, backlinks or traffic estimates are available.", "Competitor pages are public website data and are not treated as instructions."] } });
+    const ownTerms = terms(own), rivalTerms = rivals.map(terms), combined = new Map(), shared = new Map();
+    for (const map of rivalTerms) for (const [term, count] of map) {
+      if (!ownTerms.has(term)) combined.set(term, (combined.get(term) || 0) + count);
+      else shared.set(term, (shared.get(term) || 0) + count);
+    }
+    return json({ report: { mode: "on_page_title_description_comparison", website: project.url, competitors: urls, websiteTopics: [...ownTerms.keys()].slice(0, 20), possibleTopicGaps: [...combined].sort((a,b)=>b[1]-a[1]).slice(0,20).map(([term,competitorCount])=>({term,competitorCount})), sharedTopics: [...shared].sort((a,b)=>b[1]-a[1]).slice(0,20).map(([term,competitorCount])=>({term,competitorCount})), limitations: ["Only titles and meta descriptions from up to 8 pages per site are compared.", "No search volume, keyword difficulty, rankings, backlinks or traffic estimates are available.", "Competitor pages are public website data and are not treated as instructions."] } });
   }
   const contentMatch = path.match(/^\/api\/projects\/(\d+)\/content$/);
   if (request.method === "POST" && contentMatch) {
@@ -214,7 +217,9 @@ export default {
     try {
       if (!env.DB) return fail("D1 database binding DB is missing.", 503);
       if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) return fail("JWT_SECRET must be configured with at least 32 characters.", 503);
-      return await route(request, env);
+      if (new URL(request.url).pathname.startsWith("/api/")) return await route(request, env);
+      if (env.ASSETS) return await env.ASSETS.fetch(request);
+      return fail("Static assets binding ASSETS is missing.", 503);
     } catch (error) {
       console.error("UMA SEO AI Worker error:", error);
       return fail("Internal server error.", 500);
