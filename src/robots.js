@@ -3,7 +3,7 @@ const BOT = "umarseoai";
 function wildcardPattern(value) {
   const anchored = value.endsWith("$");
   const body = anchored ? value.slice(0, -1) : value;
-  const escaped = body.replace(/[.+?^${}()|[\\]\\\\]/g, "\\\\$&").replace(/\\*/g, ".*");
+  const escaped = [...body].map(char => ".+?^${}()|[]\\".includes(char) ? "\\" + char : char).join("").replaceAll("*", ".*");
   return new RegExp("^" + escaped + (anchored ? "" : ".*") + "$");
 }
 
