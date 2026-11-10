@@ -15,5 +15,6 @@ test("Google OAuth state is signed and rejects tampering and expiry", async () =
   const signed = await signState(valid, secret);
   assert.deepEqual(await verifyState(signed, secret), valid);
   assert.equal(await verifyState(signed + "x", secret), null);
+  assert.equal(await verifyState("not.a.valid.state", secret), null);
   assert.equal(await verifyState(await signState({...valid, exp: 1}, secret), secret), null);
 });
