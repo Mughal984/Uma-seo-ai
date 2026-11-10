@@ -7,7 +7,7 @@ This branch contains a Workers-native API and the existing browser dashboard ser
 - D1-backed registration, login, profile and project endpoints
 - Web Crypto HMAC-SHA256 JWT sessions and bcrypt password hashing
 - Owner-scoped project and audit records
-- Bounded technical crawler (maximum 8 pages) with same-origin and private-network protections
+- Bounded technical crawler (maximum 8 pages) with same-origin checks and local/private IP-literal blocking
 - Proposed SEO task records with approve/dismiss workflow (approval does not edit a site)
 - Competitor title/meta topic comparison (not live keyword-volume/ranking data)
 - Gemini content draft generation (draft only; never publishes)
@@ -22,7 +22,7 @@ This branch contains a Workers-native API and the existing browser dashboard ser
 - Production account protections such as email verification, password reset, session revocation and API rate limiting
 - A verified production deployment
 
-Do not describe this migration as a fully autonomous SEO agent yet. The crawler and AI drafts are working components, but they do not publish edits or guarantee ranking changes.
+Do not describe this migration as a fully autonomous SEO agent yet. The crawler and AI drafts are working components, but they do not publish edits or guarantee ranking changes. Hostnames are fetched through the Worker platform's network resolver; the crawler does not pin DNS answers to prevent a hostile domain changing its DNS between checks.
 
 ## Free-tier setup
 
