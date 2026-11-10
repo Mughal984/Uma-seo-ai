@@ -10,7 +10,7 @@ export async function readTextLimited(response, maxBytes) {
 
   const declaredLength = Number(response.headers?.get?.("content-length") || 0);
   if (declaredLength > maxBytes) {
-    await response.body?.cancel?.().catch?.(() => {});
+    if (response.body) await response.body.cancel().catch(() => {});
     throw new Error("Response exceeds the allowed size limit.");
   }
 
