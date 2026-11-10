@@ -88,7 +88,7 @@ app.patch("/api/projects/:id/tasks/:taskId",auth,async(req,res)=>{
  res.json({id:task.id,status:next,websiteChanged:false,message:next==="approved"?"Approval saved. Website changes have not been applied.":"Task dismissed."});
 });
 app.get("/api/projects/:id/audits",auth,async(req,res)=>{const p=await get("SELECT id FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const rows=await all("SELECT id,result_json,created_at FROM audits WHERE project_id=? ORDER BY id DESC LIMIT 10",[p.id]);res.json({audits:rows.map(x=>({id:x.id,createdAt:x.created_at,result:JSON.parse(x.result_json)}))})});
-app.get("/api/health",(req,res)=>res.json({status:"ok",product:"Umar SEO AI"}));\napp.get("/api/system/self-healing",auth,(req,res)=>res.json(selfHealing.snapshot()));
+app.get("/api/health",(req,res)=>res.json({status:"ok",product:"Umar SEO AI"}));\napp.get("/api/system/self-healing",auth,(req,res)=>{const s=selfHealing.snapshot();res.json({status:s.status,startedAt:s.startedAt,lastCheckAt:s.lastCheckAt,lastSuccessAt:s.lastSuccessAt,checks:s.checks,recoveries:s.recoveries,failures:s.failures});});
 
 const GOOGLE_SCOPES = [
  "https://www.googleapis.com/auth/webmasters.readonly",
