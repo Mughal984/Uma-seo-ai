@@ -34,14 +34,14 @@ function googleConfig(request, env) {
 async function stateKey(secret) {
   return crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 }
-async function signState(payload, secret) {
+export async function signState(payload, secret) {
   const header = b64url(enc.encode(JSON.stringify({ alg: "HS256", typ: "JWT" })));
   const body = b64url(enc.encode(JSON.stringify(payload)));
   const input = header + "." + body;
   const signature = await crypto.subtle.sign("HMAC", await stateKey(secret), enc.encode(input));
   return input + "." + b64url(new Uint8Array(signature));
 }
-async function verifyState(token, secret) {
+export async function verifyState(token, secret) {
   const parts = String(token || "").split(".");
   if (parts.length !== 3) return null;
   let header, payload;
@@ -54,12 +54,12 @@ async function encryptionKey(hex) {
   const raw = Uint8Array.from(hex.match(/.{2}/g), x => parseInt(x, 16));
   return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
-async function encryptToken(token, hex) {
+export async function encryptToken(token, hex) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await encryptionKey(hex), enc.encode(token));
   return "v1." + b64url(iv) + "." + b64url(new Uint8Array(ciphertext));
 }
-async function decryptToken(value, hex) {
+export async function decryptToken(value, hex) {
   const [version, iv, ciphertext] = String(value).split(".");
   if (version !== "v1" || !iv || !ciphertext) throw new Error("Stored Google token format is invalid. Reconnect Google.");
   const clear = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64url(iv) }, await encryptionKey(hex), fromB64url(ciphertext));
@@ -93,7 +93,6 @@ async function googleApi(userId, env, cfg, url, options = {}) {
   return data;
 }
 const validDates = (start, end) => /^\\d{4}-\\d{2}-\\d{2}$/.test(start || "") && /^\\d{4}-\\d{2}-\\d{2}$/.test(end || "") && start <= end;
-const redirect = status => Response.redirect(new URL("/?google=" + encodeURIComponent(status), globalThis.__googleBase), 302);
 
 export async function handleGoogleRoute(request, env, user) {
   const url = new URL(request.url), path = url.pathname, method = request.method;
