@@ -9,15 +9,15 @@ async function fetchPage(url){
  const c=new AbortController();const timer=setTimeout(()=>c.abort(),TIMEOUT);
  try{
   const r=await safeFetch(url,{signal:c.signal,headers:{"user-agent":"UmarSEOAI/1.0 (site owner initiated audit)"}});
-  if([301,302,303,307,308].includes(r.status)){const loc=r.headers.get("location");if(!loc)throw new Error("Redirect destination missing");const target=new URL(loc,url);if(target.hostname!==new URL(url).hostname)throw new Error("Cross-domain redirect blocked");return {status:r.status,redirect:target.toString()};}
-  const type=r.headers.get("content-type")||"";if(!type.toLowerCase().includes("text/html"))return {status:r.status,html:""};
+  if([301,302,303,307,308].includes(r.status)){await r.body?.cancel();const loc=r.headers.get("location");if(!loc)throw new Error("Redirect destination missing");const target=new URL(loc,url);if(target.hostname!==new URL(url).hostname)throw new Error("Cross-domain redirect blocked");return {status:r.status,redirect:target.toString()};}
+  const type=r.headers.get("content-type")||"";if(!type.toLowerCase().includes("text/html")){await r.body?.cancel();return {status:r.status,html:""}};
   if(Number(r.headers.get("content-length")||0)>MAX_BYTES)throw new Error("Page too large");
   const html=await readTextLimited(r,MAX_BYTES);return {status:r.status,html};
  }finally{clearTimeout(timer)}
 }
 async function fetchText(url){
  const c=new AbortController();const timer=setTimeout(()=>c.abort(),TIMEOUT);
- try{const r=await safeFetch(url,{signal:c.signal,headers:{"user-agent":"UmarSEOAI/1.0 (site owner initiated audit)"}});if(r.status>=300&&r.status<400)return {status:r.status,redirect:r.headers.get("location")||""};const body=await readTextLimited(r,1000000);return {status:r.status,body}}finally{clearTimeout(timer)}
+ try{const r=await safeFetch(url,{signal:c.signal,headers:{"user-agent":"UmarSEOAI/1.0 (site owner initiated audit)"}});if(r.status>=300&&r.status<400){await r.body?.cancel();return {status:r.status,redirect:r.headers.get("location")||""}};const body=await readTextLimited(r,1000000);return {status:r.status,body}}finally{clearTimeout(timer)}
 }
 function add(issues,severity,page,issue,details={}){issues.push({severity,page,issue,...details})}
 export async function auditWebsite(input){
