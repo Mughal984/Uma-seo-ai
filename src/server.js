@@ -97,7 +97,8 @@ app.get("/api/system/self-healing",auth,(req,res)=>{const s=selfHealing.snapshot
 app.post("/api/system/self-repair",async(req,res)=>{
  const configured=process.env.SELF_REPAIR_KEY||"";
  const supplied=String(req.headers["x-self-repair-key"]||"");
- if(configured.length<32||supplied.length!==configured.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(configured))){
+ const configuredBytes=Buffer.from(configured),suppliedBytes=Buffer.from(supplied);
+ if(configuredBytes.length<32||suppliedBytes.length!==configuredBytes.length||!crypto.timingSafeEqual(suppliedBytes,configuredBytes)){
   return res.status(404).json({error:"Not found."});
  }
  try{
