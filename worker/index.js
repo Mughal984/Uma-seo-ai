@@ -58,7 +58,7 @@ async function route(request, env) {
     const result = await env.DB.prepare("SELECT 1 AS ok").first();
     return json({ status: "ok", runtime: "cloudflare-workers", database: result?.ok === 1 ? "connected" : "unknown", timestamp: new Date().toISOString() });
   }
-  if (request.method === "POST" && path === "/api/register") {
+  if (request.method === "POST" && ["/api/register", "/api/auth/register"].includes(path)) {
     const data = await bodyJson(request);
     if (!data || typeof data.email !== "string" || typeof data.password !== "string") return fail("Email and password are required.");
     const email = data.email.trim().toLowerCase();
@@ -71,7 +71,7 @@ async function route(request, env) {
     const user = { id: inserted.meta.last_row_id, email };
     return json({ token: await signToken(user, env.JWT_SECRET), user }, 201);
   }
-  if (request.method === "POST" && path === "/api/login") {
+  if (request.method === "POST" && ["/api/login", "/api/auth/login"].includes(path)) {
     const data = await bodyJson(request);
     if (!data || typeof data.email !== "string" || typeof data.password !== "string") return fail("Email and password are required.");
     const user = await env.DB.prepare("SELECT id,email,password_hash FROM users WHERE email=?").bind(data.email.trim().toLowerCase()).first();
@@ -80,7 +80,7 @@ async function route(request, env) {
   }
   const user = await authenticate(request, env);
   if (!user) return fail("Authentication required.", 401);
-  if (request.method === "GET" && path === "/api/me") return json({ user });
+  if (request.method === "GET" && path === "/api/me") return json({ id: user.id, email: user.email });
   if (request.method === "GET" && path === "/api/projects") {
     const { results } = await env.DB.prepare("SELECT id,name,url,created_at FROM projects WHERE user_id=? ORDER BY id DESC").bind(user.id).all();
     return json({ projects: results || [] });
@@ -92,6 +92,34 @@ async function route(request, env) {
     try { website = normalizeWebsite(data.url); } catch (error) { return fail(error.message); }
     const inserted = await env.DB.prepare("INSERT INTO projects(user_id,name,url) VALUES(?,?,?)").bind(user.id, data.name.trim(), website).run();
     return json({ project: { id: inserted.meta.last_row_id, name: data.name.trim(), url: website } }, 201);
+  }
+  const projectTasksMatch = path.match(/^\/api\/projects\/(\d+)\/tasks$/);
+  if (request.method === "GET" && projectTasksMatch) {
+    const project = await env.DB.prepare("SELECT id FROM projects WHERE id=? AND user_id=?").bind(Number(projectTasksMatch[1]), user.id).first();
+    if (!project) return fail("Project not found.", 404);
+    const { results } = await env.DB.prepare("SELECT id,audit_id,action_json,status,created_at,updated_at FROM seo_tasks WHERE project_id=? ORDER BY id DESC LIMIT 200").bind(project.id).all();
+    return json({ tasks: (results || []).map(row => ({ ...JSON.parse(row.action_json), id: row.id, auditId: row.audit_id, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at })) });
+  }
+  const projectAuditsMatch = path.match(/^\/api\/projects\/(\d+)\/audits$/);
+  if (request.method === "GET" && projectAuditsMatch) {
+    const project = await env.DB.prepare("SELECT id FROM projects WHERE id=? AND user_id=?").bind(Number(projectAuditsMatch[1]), user.id).first();
+    if (!project) return fail("Project not found.", 404);
+    const { results } = await env.DB.prepare("SELECT id,result_json,created_at FROM audits WHERE project_id=? ORDER BY id DESC LIMIT 10").bind(project.id).all();
+    return json({ audits: (results || []).map(row => ({ id: row.id, createdAt: row.created_at, result: JSON.parse(row.result_json) })) });
+  }
+  const nestedTaskMatch = path.match(/^\/api\/projects\/(\d+)\/tasks\/(\d+)$/);
+  if (request.method === "PATCH" && nestedTaskMatch) {
+    const projectId = Number(nestedTaskMatch[1]), taskId = Number(nestedTaskMatch[2]);
+    const project = await env.DB.prepare("SELECT id FROM projects WHERE id=? AND user_id=?").bind(projectId, user.id).first();
+    if (!project) return fail("Project not found.", 404);
+    const data = await bodyJson(request);
+    if (!data || !["approved", "dismissed"].includes(data.status)) return fail("Status must be approved or dismissed.");
+    const task = await env.DB.prepare("SELECT id,status FROM seo_tasks WHERE id=? AND project_id=?").bind(taskId, projectId).first();
+    if (!task) return fail("SEO task not found.", 404);
+    if (task.status !== "proposed") return fail("This task has already been reviewed and cannot be changed again.", 409);
+    const result = await env.DB.prepare("UPDATE seo_tasks SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=? AND status='proposed'").bind(data.status, taskId, projectId).run();
+    if (!result.meta.changes) return fail("Task status changed. Refresh and try again.", 409);
+    return json({ id: taskId, status: data.status, websiteChanged: false, message: data.status === "approved" ? "Approval saved. Website changes have not been applied." : "Task dismissed." });
   }
   if (request.method === "GET" && path === "/api/tasks") {
     const { results } = await env.DB.prepare("SELECT t.id,t.project_id,t.audit_id,t.task_key,t.action_json,t.status,t.created_at,t.updated_at FROM seo_tasks t JOIN projects p ON p.id=t.project_id WHERE p.user_id=? ORDER BY t.id DESC LIMIT 200").bind(user.id).all();
