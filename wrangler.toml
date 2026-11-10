@@ -11,3 +11,7 @@ migrations_dir = "migrations"
 
 [observability]
 enabled = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
