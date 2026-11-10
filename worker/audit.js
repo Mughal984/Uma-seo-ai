@@ -6,11 +6,16 @@ function safeTarget(input, base) {
   const u = new URL(input, base);
   if (!["http:", "https:"].includes(u.protocol) || u.username || u.password) throw new Error("Only public HTTP/HTTPS URLs are allowed.");
   const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const octets = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) ? host.split(".").map(Number) : null;
+  const badV4 = octets && (octets.some(n => n > 255) || octets[0] === 0 || octets[0] === 10 ||
+    octets[0] === 127 || octets[0] >= 224 || (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127) ||
+    (octets[0] === 169 && octets[1] === 254) || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+    (octets[0] === 192 && (octets[1] === 168 || octets[1] === 0 || octets[1] === 2 || (octets[1] === 88 && octets[2] === 99))) ||
+    (octets[0] === 198 && (octets[1] === 18 || octets[1] === 19 || (octets[1] === 51 && octets[2] === 100))) ||
+    (octets[0] === 203 && octets[1] === 0 && octets[2] === 113));
   if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
-      /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) ||
-      /^169\.254\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-      host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:") ||
-      /^\d+$/.test(host)) throw new Error("Local/private network destinations are blocked.");
+      host.endsWith(".internal") || host.endsWith(".test") || host.endsWith(".invalid") || host.endsWith(".example") ||
+      host.includes(":") || badV4 || /^\d+$/.test(host)) throw new Error("Local, reserved, and literal IPv6 network destinations are blocked.");
   u.hash = "";
   return u;
 }
