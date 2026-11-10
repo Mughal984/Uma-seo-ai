@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { runSiteAudit } from "./audit.js";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
@@ -92,6 +93,24 @@ async function route(request, env) {
     try { website = normalizeWebsite(data.url); } catch (error) { return fail(error.message); }
     const inserted = await env.DB.prepare("INSERT INTO projects(user_id,name,url) VALUES(?,?,?)").bind(user.id, data.name.trim(), website).run();
     return json({ project: { id: inserted.meta.last_row_id, name: data.name.trim(), url: website } }, 201);
+  }
+  const auditMatch = path.match(/^\/api\/projects\/(\d+)\/(?:audit|audits)$/);
+  if (request.method === "POST" && auditMatch) {
+    const projectId = Number(auditMatch[1]);
+    const project = await env.DB.prepare("SELECT id,url FROM projects WHERE id=? AND user_id=?").bind(projectId, user.id).first();
+    if (!project) return fail("Project not found.", 404);
+    let result;
+    try { result = await runSiteAudit(project.url); }
+    catch (error) { return fail("Audit could not run: " + error.message, 422); }
+    const saved = await env.DB.prepare("INSERT INTO audits(project_id,result_json) VALUES(?,?)").bind(projectId, JSON.stringify(result)).run();
+    const proposals = [];
+    for (const issue of result.issues) {
+      const taskKey = issue.severity + ":" + issue.page + ":" + issue.issue;
+      const action = { title: issue.issue, severity: issue.severity, page: issue.page, description: "Review this finding and make a site-specific correction. No website change is made automatically." };
+      const inserted = await env.DB.prepare("INSERT OR IGNORE INTO seo_tasks(project_id,audit_id,task_key,action_json,status) VALUES(?,?,?,?, 'proposed')").bind(projectId, saved.meta.last_row_id, taskKey, JSON.stringify(action)).run();
+      if (inserted.meta.changes) proposals.push(action);
+    }
+    return json({ auditId: saved.meta.last_row_id, result, proposedTasks: proposals.length, message: "Audit saved. Proposed tasks require review; no website changes were applied." }, 201);
   }
   const projectTasksMatch = path.match(/^\/api\/projects\/(\d+)\/tasks$/);
   if (request.method === "GET" && projectTasksMatch) {
