@@ -10,6 +10,7 @@ import {auditWebsite} from "./audit.js";
 import {runSeoAgentV2} from "./seo-agent-v2.js";
 import {compareKeywordCoverage} from "./keyword-research.js";
 import {generateGeminiText} from "./gemini.js";
+import {canTransitionTaskStatus} from "./task-queue.js";
 import crypto from "node:crypto";
 import {encryptGoogleToken,decryptGoogleToken} from "./google-integration.js";
 const app=express(),PORT=Number(process.env.PORT||3000),SECRET=process.env.JWT_SECRET;
@@ -24,7 +25,16 @@ app.post("/api/auth/login",authLimiter,async(req,res)=>{try{const email=String(r
 app.get("/api/me",auth,(req,res)=>res.json({id:req.user.id,email:req.user.email}));
 app.get("/api/projects",auth,async(req,res)=>res.json({projects:await all("SELECT id,name,url,created_at FROM projects WHERE user_id=? ORDER BY id DESC",[req.user.id])}));
 app.post("/api/projects",auth,async(req,res)=>{try{const name=String(req.body.name||"").trim().slice(0,80),url=normalizeUrl(String(req.body.url||""));if(!name)return res.status(400).json({error:"Project name required."});const r=await run("INSERT INTO projects(user_id,name,url) VALUES(?,?,?)",[req.user.id,name,url]);res.status(201).json({project:{id:r.id,name,url}})}catch(e){res.status(400).json({error:e.message})}});
-app.post("/api/projects/:id/audit",auth,async(req,res)=>{try{const p=await get("SELECT * FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const audit=await auditWebsite(p.url);const seoPlan=runSeoAgentV2(audit);await run("INSERT INTO audits(project_id,result_json) VALUES(?,?)",[p.id,JSON.stringify({...audit,seoPlan})]);res.json({audit,seoPlan})}catch(e){res.status(400).json({error:e.message||"Audit failed."})}});
+app.post("/api/projects/:id/audit",auth,async(req,res)=>{try{
+ const p=await get("SELECT * FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);
+ if(!p)return res.status(404).json({error:"Project not found."});
+ const audit=await auditWebsite(p.url),seoPlan=runSeoAgentV2(audit);
+ const saved=await run("INSERT INTO audits(project_id,result_json) VALUES(?,?)",[p.id,JSON.stringify({...audit,seoPlan})]);
+ for(const action of seoPlan.actions){
+  await run("INSERT INTO seo_tasks(project_id,audit_id,task_key,action_json,status) VALUES(?,?,?,?,?)",[p.id,saved.id,action.id,JSON.stringify(action),"proposed"]);
+ }
+ res.json({audit,seoPlan,auditId:saved.id});
+}catch(e){res.status(400).json({error:e.message||"Audit failed."})}});
 app.post("/api/projects/:id/keyword-research",auth,async(req,res)=>{try{
  const project=await get("SELECT * FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!project)return res.status(404).json({error:"Project not found."});
  const raw=req.body.competitorUrls;if(!Array.isArray(raw)||raw.length<1||raw.length>3)return res.status(400).json({error:"Provide 1 to 3 competitor website URLs."});
@@ -59,6 +69,24 @@ app.post("/api/projects/:id/content",auth,async(req,res)=>{
  }catch(e){res.status(503).json({error:e.message||"AI content generation failed."})}
 });
 
+app.get("/api/projects/:id/tasks",auth,async(req,res)=>{
+ const project=await get("SELECT id FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);
+ if(!project)return res.status(404).json({error:"Project not found."});
+ const rows=await all("SELECT id,audit_id,action_json,status,created_at,updated_at FROM seo_tasks WHERE project_id=? ORDER BY id DESC LIMIT 200",[project.id]);
+ res.json({tasks:rows.map(row=>({...JSON.parse(row.action_json),id:row.id,auditId:row.audit_id,status:row.status,createdAt:row.created_at,updatedAt:row.updated_at}))});
+});
+app.patch("/api/projects/:id/tasks/:taskId",auth,async(req,res)=>{
+ const project=await get("SELECT id FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);
+ if(!project)return res.status(404).json({error:"Project not found."});
+ const next=String(req.body.status||"");
+ if(!["approved","dismissed"].includes(next))return res.status(400).json({error:"Status must be approved or dismissed."});
+ const task=await get("SELECT id,status FROM seo_tasks WHERE id=? AND project_id=?",[req.params.taskId,project.id]);
+ if(!task)return res.status(404).json({error:"SEO task not found."});
+ if(!canTransitionTaskStatus(task.status,next))return res.status(409).json({error:"This task has already been reviewed and cannot be changed again."});
+ const updated=await run("UPDATE seo_tasks SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND project_id=? AND status=?",[next,task.id,project.id,task.status]);
+ if(!updated.changes)return res.status(409).json({error:"Task status changed. Refresh and try again."});
+ res.json({id:task.id,status:next,websiteChanged:false,message:next==="approved"?"Approval saved. Website changes have not been applied.":"Task dismissed."});
+});
 app.get("/api/projects/:id/audits",auth,async(req,res)=>{const p=await get("SELECT id FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const rows=await all("SELECT id,result_json,created_at FROM audits WHERE project_id=? ORDER BY id DESC LIMIT 10",[p.id]);res.json({audits:rows.map(x=>({id:x.id,createdAt:x.created_at,result:JSON.parse(x.result_json)}))})});
 app.get("/api/health",(req,res)=>res.json({status:"ok",product:"Umar SEO AI"}));
 
