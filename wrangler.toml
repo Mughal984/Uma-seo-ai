@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "uma-seo-ai"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "7dc9cd38-0c46-44bf-97b9-5e40ca34b619"
 migrations_dir = "migrations"
 
 [observability]
