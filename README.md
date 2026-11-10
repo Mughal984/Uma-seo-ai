@@ -6,7 +6,7 @@ A functional early-stage SEO workspace for website owners. The current implement
 - Email/password registration and login with bcrypt password hashing and signed JWT bearer tokens.
 - SQLite persistence for users, projects, and audit history.
 - Add a website project and run an owner-initiated, limited same-domain technical SEO crawl.
-- Technical checks for titles, descriptions, H1, noindex, canonical URLs, image alt text, HTTP errors, HTML language, mobile viewport, Open Graph, JSON-LD presence, and rough visible word count.
+- Technical checks for titles, descriptions, H1, noindex, canonical URLs, image alt text, HTTP errors, HTML language, mobile viewport, Open Graph, JSON-LD presence, and rough visible word count. Crawler HTML responses are streamed with a 2 MB byte ceiling; robots.txt and sitemap responses use a 1 MB ceiling, enforced even when Content-Length is missing or inaccurate.
 - robots.txt and sitemap inspection when reachable.
 - On-page keyword signal extraction from page titles, descriptions, headings, and visible text.
 - Competitor topic comparison for 1–3 user-supplied competitor websites, showing shared topics and possible topic gaps.
@@ -58,4 +58,4 @@ External keyword-volume and backlink providers, AI content generation, automatic
 This is an MVP, not ready for unrestricted public production. Before launch, move crawling into an isolated worker with outbound firewall and DNS-rebinding protection, use HTTPS and secure HttpOnly/SameSite cookies with CSRF protection, add account recovery and email verification, a durable queue, monitoring, backups, and independent security review. Never commit `.env` or credentials.
 
 ## Tests
-Run `npm test` to execute the keyword comparison, SEO action-plan, and crawler URL-safety regression tests.
+Run `npm test` to execute the keyword comparison, SEO action-plan, crawler URL-safety, and bounded-response-reader regression tests.
