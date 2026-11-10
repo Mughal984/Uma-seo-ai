@@ -40,6 +40,20 @@ async function runKeywordResearch(p,input,b){const urls=input.value.split(",").m
 function renderKeywordResearch(r){const box=$("keywordResults");box.hidden=false;$("keywordSummary").textContent="Compared "+r.website+" with "+r.competitors.length+" competitor website(s). This is an on-page topic comparison, not live Google keyword data.";const gaps=$("keywordGaps");gaps.replaceChildren();if(!r.possibleTopicGaps.length)gaps.textContent="No obvious missing competitor topics found in this limited crawl.";r.possibleTopicGaps.forEach(x=>{const row=document.createElement("p");row.textContent=x.term+" · seen on "+x.competitorCount+" competitor(s); validate relevance before targeting.";gaps.append(row)});const shared=$("keywordShared");shared.replaceChildren();if(!r.sharedTopics.length)shared.textContent="No shared topics detected in the scanned pages.";r.sharedTopics.forEach(x=>{const row=document.createElement("p");row.textContent=x.term+" · shared with "+x.competitorCount+" competitor(s)";shared.append(row)});$("keywordLimits").textContent=r.limitations.join(" ");}
 function render(a,plan){$("results").hidden=false;$("keywordResults").hidden=true;$("resultTitle").textContent=a.website;$("scanCount").textContent=a.pagesScanned+" pages scanned";$("metrics").replaceChildren();[["High",a.counts.high],["Medium",a.counts.medium],["Low",a.counts.low],["Warnings",a.counts.warning]].forEach(([label,n])=>{const d=document.createElement("div");d.className="metric";const b=document.createElement("b");b.textContent=n||0;const s=document.createElement("span");s.textContent=label;d.append(b,s);$("metrics").append(d)});const planBox=$("seoPlan");planBox.replaceChildren();const planHeading=document.createElement("h3");planHeading.textContent="Umar SEO Agent V2 — action plan";planBox.append(planHeading);if(plan){const summary=document.createElement("p");summary.className="muted";summary.textContent=plan.summary.total+" suggested tasks · "+plan.summary.awaitingApproval+" require approval";planBox.append(summary);if(!plan.actions.length){const empty=document.createElement("p");empty.textContent="No SEO tasks suggested from this audit.";planBox.append(empty)}plan.actions.forEach(action=>{const row=document.createElement("div");row.className="issue";const title=document.createElement("b");title.textContent=action.priority.toUpperCase()+" · "+action.category;const detail=document.createElement("p");detail.textContent=action.task;const page=document.createElement("small");page.textContent=action.page||"Website-wide";row.append(title,detail,page);planBox.append(row)});const note=document.createElement("p");note.className="muted";note.textContent="Suggestions only. No website changes are made automatically; review and approve changes separately.";planBox.append(note)}else{const fallback=document.createElement("p");fallback.textContent="SEO action plan unavailable for this audit.";planBox.append(fallback)}$("issues").replaceChildren();if(!a.issues.length)$("issues").textContent="No issues found in scanned pages.";a.issues.forEach(i=>{const d=document.createElement("div");d.className="issue";const t=document.createElement("span");t.className="tag "+i.severity;t.textContent=i.severity;const s=document.createElement("span");s.textContent=i.issue+" — "+i.page;d.append(t,s);$("issues").append(d)});$("pageRows").replaceChildren();a.pages.forEach(p=>{const tr=document.createElement("tr");[p.url,p.status,p.title||"—",p.h1Count,p.description||"—"].forEach(v=>{const td=document.createElement("td");td.textContent=String(v);tr.append(td)});$("pageRows").append(tr)});$("results").scrollIntoView({behavior:"smooth"})}
 
+$("gscRun").onclick=()=>loadGoogleReport("gsc");
+$("gaRun").onclick=()=>loadGoogleReport("ga");
+function initGoogleDates(){const end=new Date();const start=new Date();start.setDate(start.getDate()-28);$("googleStart").value=start.toISOString().slice(0,10);$("googleEnd").value=end.toISOString().slice(0,10)}
+async function loadGoogleReport(kind){
+ const startDate=$("googleStart").value,endDate=$("googleEnd").value;
+ if(!startDate||!endDate||startDate>endDate){alert("Choose a valid date range.");return}
+ const button=$(kind==="gsc"?"gscRun":"gaRun"),output=$(kind==="gsc"?"gscReport":"gaReport");
+ button.disabled=true;output.textContent="Loading report…";
+ try{const params=new URLSearchParams({startDate,endDate});
+  if(kind==="gsc")params.set("siteUrl",$("gscSite").value);else params.set("propertyId",$("gaProperty").value);
+  const endpoint=kind==="gsc"?"search-console/performance":"analytics/report";
+  const data=await api("/google/"+endpoint+"?"+params.toString());output.textContent=JSON.stringify(data,null,2);
+ }catch(e){output.textContent=e.message}finally{button.disabled=false}
+}
 async function loadGoogle(){
  try{
   const status=await api("/google/status");
@@ -47,18 +61,24 @@ async function loadGoogle(){
   $("connectGoogle").hidden=status.connected;
   $("disconnectGoogle").hidden=!status.connected;
   $("googleData").replaceChildren();
+  $("googleReports").hidden=!status.connected;
   if(!status.connected)return;
+  initGoogleDates();
   const [sites,properties]=await Promise.all([api("/google/search-console/sites"),api("/google/analytics/properties")]);
   const title1=document.createElement("h3");title1.textContent="Search Console properties";$("googleData").append(title1);
   const list1=document.createElement("ul");
   (sites.sites||[]).forEach(item=>{const li=document.createElement("li");li.textContent=item.siteUrl+" · "+item.permissionLevel;list1.append(li)});
   if(!(sites.sites||[]).length){const li=document.createElement("li");li.textContent="No Search Console properties were returned for this Google account.";list1.append(li)}
   $("googleData").append(list1);
+  $("gscSite").replaceChildren();
+  (sites.sites||[]).forEach(item=>{const option=document.createElement("option");option.value=item.siteUrl;option.textContent=item.siteUrl;$("gscSite").append(option)});
   const title2=document.createElement("h3");title2.textContent="Analytics properties";$("googleData").append(title2);
   const list2=document.createElement("ul");
   (properties.properties||[]).forEach(item=>{const li=document.createElement("li");li.textContent=item.displayName+" · "+item.property;list2.append(li)});
   if(!(properties.properties||[]).length){const li=document.createElement("li");li.textContent="No Analytics properties were returned for this Google account.";list2.append(li)}
   $("googleData").append(list2);
+  $("gaProperty").replaceChildren();
+  (properties.properties||[]).forEach(item=>{const option=document.createElement("option");option.value=String(item.property||"").split("/").pop();option.textContent=item.displayName+" · "+item.property;$("gaProperty").append(option)});
  }catch(e){$("googleConnectionStatus").textContent=e.message;$("googleData").replaceChildren()}
 }
 
