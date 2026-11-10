@@ -1,14 +1,14 @@
 import * as cheerio from "cheerio";
-import {normalizeUrl,checkPublicHost} from "./security.js";
+import {normalizeUrl,safeFetch} from "./security.js";
 import {extractKeywordSignals} from "./keyword-research.js";
 import {readTextLimited} from "./http-utils.js";
 const MAX=Math.min(20,Math.max(1,Number(process.env.CRAWL_MAX_PAGES||10)));
 const TIMEOUT=Number(process.env.CRAWL_TIMEOUT_MS||10000);
 const MAX_BYTES=2000000;
 async function fetchPage(url){
- await checkPublicHost(url);const c=new AbortController();const timer=setTimeout(()=>c.abort(),TIMEOUT);
+ const c=new AbortController();const timer=setTimeout(()=>c.abort(),TIMEOUT);
  try{
-  const r=await fetch(url,{signal:c.signal,redirect:"manual",headers:{"user-agent":"UmarSEOAI/1.0 (site owner initiated audit)"}});
+  const r=await safeFetch(url,{signal:c.signal,headers:{"user-agent":"UmarSEOAI/1.0 (site owner initiated audit)"}});
   if([301,302,303,307,308].includes(r.status)){const loc=r.headers.get("location");if(!loc)throw new Error("Redirect destination missing");const target=new URL(loc,url);if(target.hostname!==new URL(url).hostname)throw new Error("Cross-domain redirect blocked");return {status:r.status,redirect:target.toString()};}
   const type=r.headers.get("content-type")||"";if(!type.toLowerCase().includes("text/html"))return {status:r.status,html:""};
   if(Number(r.headers.get("content-length")||0)>MAX_BYTES)throw new Error("Page too large");
