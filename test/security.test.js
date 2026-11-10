@@ -17,3 +17,30 @@ test("blocks private, link-local, carrier-grade, reserved, and mapped IP ranges"
 test("allows a public literal IP address",async()=>{
   await assert.doesNotReject(checkPublicHost("https://1.1.1.1"));
 });
+
+test("resolves and returns a single public address for connection pinning", async () => {
+  const { resolvePublicAddress } = await import("../src/security.js");
+  const record = await resolvePublicAddress("example.test", async (host, options) => {
+    assert.equal(host, "example.test");
+    assert.equal(options.all, true);
+    return [{ address: "93.184.216.34", family: 4 }];
+  });
+  assert.deepEqual(record, { address: "93.184.216.34", family: 4 });
+});
+
+test("rejects DNS answers containing any private address", async () => {
+  const { resolvePublicAddress } = await import("../src/security.js");
+  await assert.rejects(resolvePublicAddress("rebind.test", async () => [
+    { address: "93.184.216.34", family: 4 },
+    { address: "127.0.0.1", family: 4 }
+  ]), /private\/restricted/i);
+});
+
+test("pinned lookup always returns the validated address", async () => {
+  const { createPinnedLookup } = await import("../src/security.js");
+  const lookup = createPinnedLookup({ address: "93.184.216.34", family: 4 });
+  const standard = await new Promise((resolve, reject) => lookup("attacker.test", {}, (error, address, family) => error ? reject(error) : resolve({ address, family })));
+  assert.deepEqual(standard, { address: "93.184.216.34", family: 4 });
+  const all = await new Promise((resolve, reject) => lookup("attacker.test", { all: true }, (error, records) => error ? reject(error) : resolve(records)));
+  assert.deepEqual(all, [{ address: "93.184.216.34", family: 4 }]);
+});
