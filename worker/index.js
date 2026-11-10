@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { runSiteAudit } from "./audit.js";
 import { generateAI } from "./ai.js";
+import { handleGoogleRoute } from "./google.js";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
@@ -80,8 +81,10 @@ async function route(request, env) {
     if (!user || !(await bcrypt.compare(data.password, user.password_hash))) return fail("Invalid email or password.", 401);
     return json({ token: await signToken(user, env.JWT_SECRET), user: { id: user.id, email: user.email } });
   }
+  if (path.startsWith("/api/google/") && method === "GET" && path === "/api/google/callback") return await handleGoogleRoute(request, env, null);
   const user = await authenticate(request, env);
   if (!user) return fail("Authentication required.", 401);
+  if (path.startsWith("/api/google/")) return await handleGoogleRoute(request, env, user);
   if (request.method === "GET" && path === "/api/me") return json({ id: user.id, email: user.email });
   if (request.method === "GET" && path === "/api/projects") {
     const { results } = await env.DB.prepare("SELECT id,name,url,created_at FROM projects WHERE user_id=? ORDER BY id DESC").bind(user.id).all();
