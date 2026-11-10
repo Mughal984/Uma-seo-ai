@@ -3,7 +3,7 @@ const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 export async function generateGeminiText({
   prompt,
   apiKey = process.env.GEMINI_API_KEY,
-  model = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite",
+  model = process.env.GEMINI_MODEL || "gemini-2.5-flash",
   fetchImpl = fetch
 }) {
   if (!apiKey) throw new Error("Gemini AI is not configured. Add GEMINI_API_KEY to the server environment.");

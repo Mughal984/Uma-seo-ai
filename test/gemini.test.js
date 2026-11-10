@@ -42,3 +42,26 @@ test("Gemini adapter reports provider errors without exposing the API key", asyn
     error => error.message.includes("429") && !error.message.includes("never-print-this")
   );
 });
+
+test("Gemini adapter uses the documented default model when GEMINI_MODEL is unset", async () => {
+  const previous = process.env.GEMINI_MODEL;
+  delete process.env.GEMINI_MODEL;
+  try {
+    let requestedUrl = "";
+    await generateGeminiText({
+      apiKey: "test-secret",
+      prompt: "Write a useful SEO title",
+      fetchImpl: async (url) => {
+        requestedUrl = url;
+        return { ok: true, json: async () => ({
+          modelVersion: "gemini-2.5-flash",
+          candidates: [{ content: { parts: [{ text: "A useful SEO title" }] } }]
+        }) };
+      }
+    });
+    assert.match(requestedUrl, /gemini-2\.5-flash:generateContent$/);
+  } finally {
+    if (previous === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = previous;
+  }
+});
