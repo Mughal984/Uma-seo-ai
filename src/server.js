@@ -16,8 +16,16 @@ import {encryptGoogleToken,decryptGoogleToken} from "./google-integration.js";
 import {createSelfHealingSupervisor} from "./self-healing.js";
 import {createSelfRepairEngine} from "./self-repair.js";
 const app=express(),PORT=Number(process.env.PORT||3000),SECRET=process.env.JWT_SECRET;
-const selfHealing=createSelfHealingSupervisor({all,run});
 const selfRepair=createSelfRepairEngine({generateText:generateGeminiText});
+const autoSelfRepair=process.env.AUTO_SELF_REPAIR==="true";
+const selfHealing=createSelfHealingSupervisor({
+ all,run,
+ ...(autoSelfRepair?{
+  diagnose:()=>selfRepair.validate(),
+  repair:details=>selfRepair.repair(details),
+  restart:process.env.AUTO_RESTART_AFTER_REPAIR==="true"?()=>{setTimeout(()=>process.exit(1),1000).unref();}:null
+ }: {})
+});
 if(!SECRET||SECRET.length<32){console.error("Set JWT_SECRET to at least 32 characters in .env");process.exit(1)}
 app.use(helmet({contentSecurityPolicy:false}));app.use(express.json({limit:"100kb"}));app.use(express.static("public"));
 app.use("/api",rateLimit({windowMs:900000,limit:100,standardHeaders:true,legacyHeaders:false}));
@@ -93,7 +101,7 @@ app.patch("/api/projects/:id/tasks/:taskId",auth,async(req,res)=>{
 });
 app.get("/api/projects/:id/audits",auth,async(req,res)=>{const p=await get("SELECT id FROM projects WHERE id=? AND user_id=?",[req.params.id,req.user.id]);if(!p)return res.status(404).json({error:"Project not found."});const rows=await all("SELECT id,result_json,created_at FROM audits WHERE project_id=? ORDER BY id DESC LIMIT 10",[p.id]);res.json({audits:rows.map(x=>({id:x.id,createdAt:x.created_at,result:JSON.parse(x.result_json)}))})});
 app.get("/api/health",(req,res)=>res.json({status:"ok",product:"Umar SEO AI"}));
-app.get("/api/system/self-healing",auth,(req,res)=>{const s=selfHealing.snapshot();res.json({status:s.status,startedAt:s.startedAt,lastCheckAt:s.lastCheckAt,lastSuccessAt:s.lastSuccessAt,checks:s.checks,recoveries:s.recoveries,failures:s.failures});});
+app.get("/api/system/self-healing",auth,(req,res)=>{const s=selfHealing.snapshot();res.json({status:s.status,startedAt:s.startedAt,lastCheckAt:s.lastCheckAt,lastSuccessAt:s.lastSuccessAt,lastDiagnosticAt:s.lastDiagnosticAt,lastRepairAt:s.lastRepairAt,lastError:s.lastError,checks:s.checks,diagnostics:s.diagnostics,recoveries:s.recoveries,failures:s.failures,automaticRepairEnabled:autoSelfRepair,recentEvents:s.actions});});
 app.post("/api/system/self-repair",async(req,res)=>{
  const configured=process.env.SELF_REPAIR_KEY||"";
  const supplied=String(req.headers["x-self-repair-key"]||"");

@@ -52,3 +52,52 @@ test("marks runtime degraded when SQLite integrity check is not ok", async () =>
   const result = await supervisor.check();
   assert.equal(result.status, "degraded");
 });
+
+
+test("automatic diagnostics repair a failed test suite and request restart", async () => {
+  const db = fakeDb();
+  let repaired = 0, restarted = 0;
+  const supervisor = createSelfHealingSupervisor({
+    ...db,
+    diagnose: async () => ({ passed: false, reason: "tests_failed", output: "AssertionError: regression" }),
+    repair: async ({ diagnostics }) => {
+      assert.match(diagnostics, /AssertionError/);
+      repaired += 1;
+      return { applied: true, files: ["src/example.js"], backupDirectory: "data/backups", validation: { reason: "tests_passed" } };
+    },
+    restart: async () => { restarted += 1; }
+  });
+  const result = await supervisor.check();
+  assert.equal(result.status, "restart_required");
+  assert.equal(result.recoveries, 1);
+  assert.equal(repaired, 1);
+  assert.equal(restarted, 1);
+  assert.equal(result.actions[0].event, "process_restart_requested");
+});
+
+test("automatic diagnostics never overwrite code when repair rolls back", async () => {
+  const db = fakeDb();
+  const supervisor = createSelfHealingSupervisor({
+    ...db,
+    diagnose: async () => ({ passed: false, reason: "tests_failed", output: "failing test" }),
+    repair: async () => ({ applied: false, rolledBack: true, reason: "tests_failed" })
+  });
+  const result = await supervisor.check();
+  assert.equal(result.status, "degraded");
+  assert.match(result.lastError, /not applied/);
+  assert.equal(result.recoveries, 0);
+});
+
+test("automatic diagnostics leave healthy code unchanged", async () => {
+  const db = fakeDb();
+  let repairCalls = 0;
+  const supervisor = createSelfHealingSupervisor({
+    ...db,
+    diagnose: async () => ({ passed: true, reason: "tests_passed" }),
+    repair: async () => { repairCalls += 1; return { applied: true }; }
+  });
+  const result = await supervisor.check();
+  assert.equal(result.status, "healthy");
+  assert.equal(result.diagnostics, 1);
+  assert.equal(repairCalls, 0);
+});

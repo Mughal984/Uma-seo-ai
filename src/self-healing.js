@@ -1,24 +1,44 @@
 const DEFAULT_INTERVAL_MS = 60_000;
+const DEFAULT_DIAGNOSTIC_INTERVAL_MS = 5 * 60_000;
+const DEFAULT_REPAIR_COOLDOWN_MS = 30 * 60_000;
 const MAX_EVENTS = 100;
 
 /**
- * Runtime self-healing supervisor.
- * It performs bounded, reversible maintenance only; it never edits source code,
- * customer websites, or credentials.
+ * Runtime supervisor. It checks database integrity, performs bounded cleanup,
+ * and optionally runs the project test suite. A failed test suite may trigger
+ * the guarded source-repair engine; successful repairs request a process restart.
  */
-export function createSelfHealingSupervisor({ all, run, intervalMs = DEFAULT_INTERVAL_MS, now = () => new Date() }) {
+export function createSelfHealingSupervisor({
+  all,
+  run,
+  intervalMs = DEFAULT_INTERVAL_MS,
+  diagnosticIntervalMs = DEFAULT_DIAGNOSTIC_INTERVAL_MS,
+  repairCooldownMs = DEFAULT_REPAIR_COOLDOWN_MS,
+  diagnose = null,
+  repair = null,
+  restart = null,
+  now = () => new Date()
+}) {
   if (typeof all !== "function" || typeof run !== "function") {
     throw new TypeError("Database all/run functions are required.");
   }
+  if (diagnose !== null && typeof diagnose !== "function") throw new TypeError("diagnose must be a function.");
+  if (repair !== null && typeof repair !== "function") throw new TypeError("repair must be a function.");
   let timer = null;
   let running = false;
+  let lastDiagnosticMs = 0;
+  let lastRepairMs = 0;
+  let restartRequested = false;
   const state = {
     status: "starting",
     startedAt: now().toISOString(),
     lastCheckAt: null,
     lastSuccessAt: null,
+    lastDiagnosticAt: null,
+    lastRepairAt: null,
     lastError: null,
     checks: 0,
+    diagnostics: 0,
     recoveries: 0,
     failures: 0,
     actions: []
@@ -53,11 +73,56 @@ export function createSelfHealingSupervisor({ all, run, intervalMs = DEFAULT_INT
         throw new Error("Database integrity check did not return ok.");
       }
 
-      // Safe automatic recovery: expired one-time OAuth states cannot be reused.
       const expired = await run("DELETE FROM google_oauth_states WHERE expires_at < ?", [Date.now()]);
       if (expired.changes > 0) {
         state.recoveries += 1;
         await record("recovery", "expired_oauth_states_cleaned", { count: expired.changes });
+      }
+
+      const currentMs = now().getTime();
+      if (diagnose && repair && !restartRequested && currentMs - lastDiagnosticMs >= diagnosticIntervalMs) {
+        lastDiagnosticMs = currentMs;
+        state.lastDiagnosticAt = now().toISOString();
+        state.diagnostics += 1;
+        const validation = await diagnose();
+        if (!validation?.passed) {
+          const diagnosticText = String(validation?.output || validation?.reason || "Project test suite failed.").slice(0, 8000);
+          await record("warning", "automated_diagnostics_failed", {
+            reason: validation?.reason || "unknown",
+            exitCode: validation?.exitCode ?? null
+          });
+          if (currentMs - lastRepairMs >= repairCooldownMs) {
+            lastRepairMs = currentMs;
+            state.lastRepairAt = now().toISOString();
+            const result = await repair({ diagnostics: diagnosticText });
+            if (result?.applied === true) {
+              state.recoveries += 1;
+              restartRequested = true;
+              state.status = "restart_required";
+              await record("recovery", "automatic_source_repair_applied", {
+                files: result.files || [],
+                backupDirectory: result.backupDirectory || null,
+                validation: result.validation?.reason || "tests_passed"
+              });
+              if (typeof restart === "function") {
+                await restart();
+                await record("warning", "process_restart_requested", {});
+              }
+              return snapshot();
+            }
+            state.status = "degraded";
+            state.failures += 1;
+            state.lastError = "Automatic repair was not applied: " + String(result?.reason || "safe repair unavailable").slice(0, 180);
+            await record("error", "automatic_source_repair_not_applied", {
+              reason: result?.reason || "unknown",
+              rolledBack: result?.rolledBack === true
+            });
+            return snapshot();
+          }
+          state.status = "degraded";
+          state.lastError = "Diagnostics failed; automatic repair is cooling down.";
+          return snapshot();
+        }
       }
 
       state.status = "healthy";
