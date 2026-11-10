@@ -27,7 +27,7 @@ jobs:
           test -n "$JWT_SECRET" || (echo "Missing GitHub secret JWT_SECRET" && exit 1)
           printf '%s' "$JWT_SECRET" | npx --yes wrangler@4 secret put JWT_SECRET
       - name: Set optional Gemini secret
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
+        if: env.GEMINI_API_KEY != ''
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 0e73439990c1228c2b9d784b62a6b4d5
