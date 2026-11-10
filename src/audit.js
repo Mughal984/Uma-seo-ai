@@ -16,8 +16,8 @@ async function fetchPage(url){
  }finally{clearTimeout(timer)}
 }
 async function fetchText(url){
- await checkPublicHost(url);const c=new AbortController();const timer=setTimeout(()=>c.abort(),TIMEOUT);
- try{const r=await fetch(url,{signal:c.signal,redirect:"manual",headers:{"user-agent":"UmarSEOAI/1.0 (site owner initiated audit)"}});if(r.status>=300&&r.status<400)return {status:r.status,redirect:r.headers.get("location")||""};const body=await readTextLimited(r,1000000);return {status:r.status,body}}finally{clearTimeout(timer)}
+ const c=new AbortController();const timer=setTimeout(()=>c.abort(),TIMEOUT);
+ try{const r=await safeFetch(url,{signal:c.signal,headers:{"user-agent":"UmarSEOAI/1.0 (site owner initiated audit)"}});if(r.status>=300&&r.status<400)return {status:r.status,redirect:r.headers.get("location")||""};const body=await readTextLimited(r,1000000);return {status:r.status,body}}finally{clearTimeout(timer)}
 }
 function add(issues,severity,page,issue,details={}){issues.push({severity,page,issue,...details})}
 export async function auditWebsite(input){
