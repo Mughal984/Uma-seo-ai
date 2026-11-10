@@ -21,6 +21,19 @@ A functional early-stage SEO workspace for website owners. The current implement
 ## Keyword and competitor comparison
 Use the “Compare keyword topics” field on a website project and provide 1–3 competitor URLs. The feature compares visible on-page terms and phrases from the same limited crawl. It is a topic-gap aid, not live Google keyword research: it does not return search volume, keyword difficulty, rankings, SERP positions, backlinks, or traffic estimates. Current tokenization is English-focused. Review every suggested topic for relevance before publishing content.
 
+## Deploy with a persistent Node host
+
+A Dockerfile and Render Blueprint are included. The app uses native SQLite, so deploy it on a Node/Docker host with a persistent disk mounted at `/var/data`; do not use an ephemeral filesystem for the database. The included Render Blueprint provisions a paid Starter web service and a 1 GB persistent disk. A free ephemeral instance is not a safe production substitute because its local database can be lost on restart or redeploy.
+
+Deployment steps:
+1. Push this repository to GitHub and open Render's Blueprint flow: https://render.com/deploy
+2. Connect this repository and apply `render.yaml`.
+3. In the service environment, set `JWT_SECRET` (at least 32 random characters), `GEMINI_API_KEY`, and `SELF_REPAIR_KEY` (at least 32 random characters). Set `PUBLIC_BASE_URL` to the exact HTTPS service URL. Google OAuth variables are optional unless you want Google integrations; if enabled, add the callback URL `PUBLIC_BASE_URL/api/google/callback` to the Google OAuth client.
+4. Deploy and confirm `/api/health` returns `{"status":"ok","product":"Umar SEO AI"}`.
+5. Keep `AUTO_RESTART_AFTER_REPAIR=false` until a persistent, tested restart strategy is configured. Automatic repair can update the running container's writable source files, but a platform redeploy from the original image may discard those changes. The current setup reports `restart_required`; it does not claim to perform a durable automatic redeploy.
+
+Never put secrets in GitHub files or the browser. The hosting account, billing approval, and secret values must be supplied by the owner; this repository change alone does not create a live deployment.
+
 ## Run locally
 Requires Node.js 20 or newer.
 
