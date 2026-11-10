@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: uma-seo-ai
+    runtime: docker
+    plan: starter
+    region: singapore
+    healthCheckPath: /api/health
+    disk:
+      name: uma-seo-ai-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_FILE
+        value: /var/data/umar-seo-ai.sqlite
+      - key: AUTO_SELF_REPAIR
+        value: "true"
+      - key: AUTO_RESTART_AFTER_REPAIR
+        value: "false"
+      - key: JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SELF_REPAIR_KEY
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_TOKEN_ENCRYPTION_KEY
+        sync: false
