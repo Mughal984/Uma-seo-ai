@@ -27,7 +27,7 @@ Do not describe this migration as a fully autonomous SEO agent yet. The crawler 
 ## Free-tier setup
 
 1. Create a Cloudflare D1 database named `uma-seo-ai` in your Cloudflare dashboard.
-2. Copy its database ID into `wrangler.toml` where `REPLACE_WITH_YOUR_D1_DATABASE_ID` appears.
+2. Copy its database ID into `wrangler.toml` where the all-zero placeholder UUID appears.
 3. Install project dependencies with `npm install`.
 4. Set a strong, unique JWT secret: `npx wrangler secret put JWT_SECRET`.
 5. Set `PUBLIC_BASE_URL` to the exact deployed HTTPS origin, e.g. `https://YOUR-WORKER.workers.dev`, using `npx wrangler secret put PUBLIC_BASE_URL`.
